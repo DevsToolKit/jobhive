@@ -4,7 +4,7 @@ import sys
 import uvicorn
 
 def main():
-    PORT = os.getenv("BACKEND_PORT", 42423)
+    PORT = os.getenv("BACKEND_PORT")
     DATA_DIR = os.getenv("DATA_DIR")
 
     if not PORT or DATA_DIR:

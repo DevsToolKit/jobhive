@@ -45,3 +45,6 @@ htmlcov/
 
 # Electron
 out/
+
+#dummy data
+.dev-data/

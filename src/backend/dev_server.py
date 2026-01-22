@@ -1,23 +1,29 @@
 # src/backend/dev_server.py
-import uvicorn
-from pathlib import Path
+
 import os
+import uvicorn
+from config import settings
+from utils.logger import setup_logger
+
 
 def main():
+    os.environ.setdefault("ENV", "development")
+    os.environ.setdefault("LOG_LEVEL", "DEBUG")
 
-    os.environ.setdefault("BACKEND_PORT", "8000")
-    os.environ.setdefault(
-        "DATA_DIR",
-        str(Path(__file__).parent / ".dev-data")
-    )
+    logger = setup_logger()
+    logger.info("Starting backend dev server")
+    logger.debug(f"ENV={settings.ENV}")
+    logger.debug(f"DATA_DIR={settings.DATA_DIR}")
+    logger.debug(f"DB_PATH={settings.DB_PATH}")
 
     uvicorn.run(
         "app:app",
-        host="127.0.0.1",
-        port=int(os.environ["BACKEND_PORT"]),
+        host=settings.HOST,
+        port=settings.PORT,
         reload=True,
         log_level="debug",
     )
+
 
 if __name__ == "__main__":
     main()

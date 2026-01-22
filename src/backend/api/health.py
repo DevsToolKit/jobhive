@@ -1,11 +1,27 @@
-# src/backend/api/health.py
 from fastapi import APIRouter
+from datetime import datetime
+import sys
+import platform
 
-router = APIRouter()
+router = APIRouter(tags=["health"])
+
 
 @router.get("/health")
-def health():
+async def health_check():
+    """Health check endpoint"""
     return {
         "status": "ok",
-        "service": "job-scraper-backend",
+        "timestamp": datetime.now().isoformat(),
+        "python_version": sys.version,
+        "platform": platform.platform()
+    }
+
+
+@router.get("/api/health")
+async def api_health_check():
+    """API health check (alternative path)"""
+    return {
+        "status": "ok",
+        "message": "JobHive API is running",
+        "timestamp": datetime.now().isoformat()
     }
