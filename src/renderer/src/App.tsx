@@ -1,35 +1,27 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
+import { SplashScreen } from './screens/SplashScreen';
+
+// Placeholder screens
+const HistoryScreen = () => <div className="p-6">History Screen (Coming Soon)</div>;
+const PresetsScreen = () => <div className="p-6">Presets Screen (Coming Soon)</div>;
+const SettingsScreen = () => <div className="p-6">Settings Screen (Coming Soon)</div>;
+const ResultsScreen = () => <div className="p-6">Results Screen (Coming Soon)</div>;
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
     <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
+      <Router>
+        <Routes>
+          <Route path="/" element={<SplashScreen />} />
+          <Route path="/history" element={<HistoryScreen />} />
+          <Route path="/presets" element={<PresetsScreen />} />
+          <Route path="/settings" element={<SettingsScreen />} />
+          <Route path="/results" element={<ResultsScreen />} />
+        </Routes>
+      </Router>
     </>
-  )
+  );
 }
 
-export default App
+export default App;
