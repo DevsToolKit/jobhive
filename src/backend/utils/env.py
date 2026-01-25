@@ -1,11 +1,7 @@
-# src/backend/utils/env.py
-
 import os
-
 
 def get_env() -> str:
     return os.getenv("ENV", "development").lower()
-
 
 def is_dev() -> bool:
     return get_env() in ("dev", "development")

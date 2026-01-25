@@ -2,14 +2,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from api.health import router as health_router
-from api.scraping import router as scraping_router
-from api.sessions import router as sessions_router
-from api.presets import router as presets_router
-from api.analytics import router as analytics_router
-from api.jobs import router as jobs_router
 from database.connection import init_database
-from core.task_manager import task_manager
+
+from api.health import router as HealthRouter
+from api.scrapping import router as ScrapeRouter
+from api.sessions import router as SessionsRouter
+
 from utils.logger import logger
 
 
@@ -31,7 +29,7 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Shutting down JobHive Backend...")
-    task_manager.shutdown()
+    # task_manager.shutdown()
     logger.info("Task manager shut down")
 
 
@@ -46,6 +44,10 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
         lifespan=lifespan
     )
+
+    app.include_router(HealthRouter)
+    app.include_router(ScrapeRouter)
+    app.include_router(SessionsRouter)
     
     # CORS middleware
     app.add_middleware(
@@ -55,14 +57,6 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    
-    # Include all routers
-    app.include_router(health_router)
-    app.include_router(scraping_router)
-    app.include_router(sessions_router)
-    app.include_router(presets_router)
-    app.include_router(analytics_router)
-    app.include_router(jobs_router)
     
     logger.info("All routes registered")
     

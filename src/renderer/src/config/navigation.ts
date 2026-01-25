@@ -1,30 +1,23 @@
-import {
-  IconHome,
-  IconHistory,
-  IconBookmark,
-  IconSettings,
-  IconSearch,
-  IconInfoCircle,
-} from '@tabler/icons-react';
+import { GoHome, GoHistory, GoCommandPalette, GoSearch, GoGear, GoInfo } from 'react-icons/go';
 import type { NavItem } from '@/types/navigation';
 
 export const navMain: NavItem[] = [
   {
-    title: 'Workspace',
+    title: 'Dashboard',
     url: '/',
-    icon: IconHome,
+    icon: GoHome,
     action: 'navigate',
   },
   {
-    title: 'History',
+    title: 'Jobs Scrape History',
     url: '/history',
-    icon: IconHistory,
+    icon: GoHistory,
     action: 'navigate',
   },
   {
     title: 'Presets',
     url: '/presets',
-    icon: IconBookmark,
+    icon: GoCommandPalette,
     action: 'navigate',
   },
 ];
@@ -32,19 +25,19 @@ export const navMain: NavItem[] = [
 export const navSecondary: NavItem[] = [
   {
     title: 'Search',
-    icon: IconSearch,
+    icon: GoSearch,
     action: 'modal',
     modalId: 'search',
   },
   {
     title: 'Settings',
     url: '/settings',
-    icon: IconSettings,
+    icon: GoGear,
     action: 'navigate',
   },
   {
     title: 'About',
-    icon: IconInfoCircle,
+    icon: GoInfo,
     action: 'modal',
     modalId: 'about',
   },

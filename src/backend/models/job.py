@@ -15,11 +15,12 @@ class Job(BaseModel):
     location_state: Optional[str]
     is_remote: bool = False
     description: Optional[str]
+    tags: Optional[str]
     job_type: Optional[str]
-    interval: Optional[str]
-    min_amount: Optional[float]
-    max_amount: Optional[float]
-    currency: Optional[str]
+    min_amount: Optional[float] = None
+    max_amount: Optional[float] = None
+    currency: Optional[str] = None
+    interval: Optional[str] = None
     date_posted: Optional[datetime]
     scraped_at: datetime
     emails: Optional[str]

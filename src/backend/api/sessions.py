@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Response
 from typing import List, Optional
+from datetime import datetime, timezone
 
 from models.session import SessionSummary, Session
 from models.job import Job
@@ -16,6 +17,32 @@ async def get_all_sessions(limit: int = 100):
     """Get all scraping sessions"""
     try:
         return session_service.get_all_sessions(limit=limit)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+@router.get("/latest", response_model=List[SessionSummary])
+async def get_latest_session():
+    """
+    Return today's latest session only.
+    If the latest session is from a previous day, return empty list.
+    """
+
+    try:
+        # Get today's date (UTC – change if you use local timezone)
+        today = datetime.now(timezone.utc).date()
+
+        # Get recent sessions (already sorted DESC ideally)
+        sessions = session_service.get_all_sessions(limit=10)
+
+        # Filter only today's sessions
+        todays_sessions = [
+            s for s in sessions
+            if s.created_at.date() == today
+        ]
+        
+        return todays_sessions[:1]
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

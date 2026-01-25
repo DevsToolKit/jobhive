@@ -88,6 +88,7 @@ class SessionService:
                     location_state=row['location_state'],
                     is_remote=bool(row['is_remote']),
                     description=row['description'],
+                    tags=row['tags'],
                     job_type=row['job_type'],
                     interval=row['interval'],
                     min_amount=row['min_amount'],

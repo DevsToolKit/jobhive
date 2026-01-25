@@ -28,7 +28,7 @@
       "@/screens/*": ["./src/screens/*"],
       "@/services/*": ["./src/services/*"],
       "@/utils/*": ["./src/utils/*"],
-      "@/state/*": ["./src/state/*"],
+      "@/state/*": ["src/context/*"],
       "@/types/*": ["./src/types/*"],
       "@/lib/*": ["./src/lib/*"]
     }

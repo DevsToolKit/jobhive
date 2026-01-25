@@ -1,3 +1,4 @@
+import uuid
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sse_starlette.sse import EventSourceResponse
@@ -13,7 +14,6 @@ router = APIRouter(prefix="/api/scrape", tags=["scraping"])
 
 # Global scraping service instance
 scraping_service = ScrapingService()
-
 
 @router.post("/start")
 async def start_scrape(request: ScrapeRequest):
@@ -33,17 +33,12 @@ async def start_scrape(request: ScrapeRequest):
         # Submit scraping task to background
         # Note: We'll get session_id from the service
         session_id = None
-        
+         
         def run_scrape():
             nonlocal session_id
             session_id = scraping_service.start_scrape(config, progress_callback)
             return session_id
-        
-        # Start in background thread (JobSpy is synchronous)
-        # We need to run it in a separate thread to not block FastAPI
-        import uuid
-        temp_task_id = str(uuid.uuid4())
-        
+
         # Actually, let's make this simpler - return session ID immediately
         # and start scraping in background
         

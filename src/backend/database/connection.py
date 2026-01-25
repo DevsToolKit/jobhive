@@ -4,18 +4,11 @@ from contextlib import contextmanager
 
 from config import settings
 
-
 # Single source of truth
 DB_PATH: Path = settings.DB_PATH
 
-# Ensure directory exists (safe, idempotent)
+# Ensure directory exists
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-
-
-def get_db_path() -> str:
-    """Return database file path as string"""
-    return str(DB_PATH)
-
 
 def init_database():
     """Initialize database using schema.sql"""
@@ -30,7 +23,6 @@ def init_database():
     conn.close()
 
     print(f"Database initialized at: {DB_PATH}")
-
 
 @contextmanager
 def get_db():

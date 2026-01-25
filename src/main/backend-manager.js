@@ -1,211 +1,221 @@
+// backend-manager.js
 const { spawn } = require('child_process');
-const path = require('path');
 const net = require('net');
+const dns = require('dns');
+const path = require('path');
+const fs = require('fs');
 const { app } = require('electron');
-const log = require('electron-log');
+
+const ERROR_IDS = {
+  NONE: null,
+  NO_INTERNET: 'NO_INTERNET',
+  NO_FREE_PORT: 'NO_FREE_PORT',
+  BACKEND_START_FAILED: 'BACKEND_START_FAILED',
+  BACKEND_CRASHED: 'BACKEND_CRASHED',
+  BACKEND_TIMEOUT: 'BACKEND_TIMEOUT',
+};
+
+const STARTUP_TIMEOUT_MS = 12_000;
 
 class BackendManager {
-  constructor() {
-    this.backendProcess = null;
+  constructor({ store, log }) {
+    this.store = store;
+    this.log = log;
+
+    this.process = null;
     this.port = null;
-    this.isReady = false;
-    this.retryCount = 0;
-    this.maxRetries = 3;
+    this.running = false;
   }
 
-  /**
-   * Get path to Python executable
-   */
-  getPythonPath() {
-    const isDev = !app.isPackaged;
+  /* ---------------- Environment ---------------- */
 
-    if (isDev) {
-      // In development, use system Python
-      return process.platform === 'win32' ? 'python' : 'python3';
-    }
-
-    // In production, use bundled Python
-    const platform = process.platform;
-    let execName;
-
-    if (platform === 'win32') {
-      execName = 'python-runtime-win.exe';
-    } else if (platform === 'darwin') {
-      execName = 'python-runtime-mac';
-    } else {
-      execName = 'python-runtime-linux';
-    }
-
-    return path.join(process.resourcesPath, 'python-runtime', execName);
+  isDev() {
+    return !app.isPackaged;
   }
 
-  /**
-   * Get path to backend script
-   */
-  getBackendPath() {
-    const isDev = !app.isPackaged;
-
-    if (isDev) {
-      return path.join(__dirname, '../backend/main.py');
+  getBackendCommand() {
+    if (this.isDev()) {
+      return {
+        cmd: 'python',
+        args: [
+          '-m',
+          'uvicorn',
+          'app:app',
+          '--host',
+          '127.0.0.1',
+          '--port',
+          String(this.port),
+          '--log-level',
+          'info',
+        ],
+        cwd: path.join(__dirname, '../backend'),
+      };
     }
-
-    return path.join(process.resourcesPath, 'backend', 'main.py');
   }
 
-  /**
-   * Find an available port
-   */
-  async findAvailablePort(startPort = 8765) {
-    return new Promise((resolve, reject) => {
-      const server = net.createServer();
+  /* ---------------- Utilities ---------------- */
 
-      server.listen(startPort, () => {
-        const { port } = server.address();
-        server.close(() => resolve(port));
-      });
-
-      server.on('error', (err) => {
-        if (err.code === 'EADDRINUSE') {
-          resolve(this.findAvailablePort(startPort + 1));
-        } else {
-          reject(err);
-        }
-      });
+  checkInternet() {
+    return new Promise((resolve) => {
+      dns.lookup('google.com', (err) => resolve(!err));
     });
   }
 
-  /**
-   * Start the Python backend
-   */
+  checkPortFree(port) {
+    return new Promise((resolve) => {
+      const server = net.createServer();
+      server.once('error', () => resolve(false));
+      server.once('listening', () => {
+        server.close(() => resolve(true));
+      });
+      server.listen(port, '127.0.0.1');
+    });
+  }
+
+  async findFreePort(start = 48000, end = 48100) {
+    for (let p = start; p <= end; p++) {
+      if (await this.checkPortFree(p)) return p;
+    }
+    throw new Error(ERROR_IDS.NO_FREE_PORT);
+  }
+
+  waitForBackendReady(port, timeoutMs) {
+    const start = Date.now();
+
+    return new Promise((resolve, reject) => {
+      const tryConnect = () => {
+        const socket = new net.Socket();
+
+        socket.once('connect', () => {
+          socket.destroy();
+          resolve(true);
+        });
+
+        socket.once('error', () => {
+          socket.destroy();
+          if (Date.now() - start > timeoutMs) {
+            reject(new Error(ERROR_IDS.BACKEND_TIMEOUT));
+          } else {
+            setTimeout(tryConnect, 300);
+          }
+        });
+
+        socket.connect(port, '127.0.0.1');
+      };
+
+      tryConnect();
+    });
+  }
+
+  /* ---------------- Public API ---------------- */
+
   async start() {
+    if (this.running) {
+      return {
+        ok: true,
+        running: true,
+        port: this.port,
+        errorId: null,
+      };
+    }
+
+    const online = await this.checkInternet();
+    if (!online) {
+      return {
+        ok: false,
+        running: false,
+        port: null,
+        errorId: ERROR_IDS.NO_INTERNET,
+      };
+    }
+
     try {
-      // Find available port
-      this.port = await this.findAvailablePort(8765);
+      this.port = await this.findFreePort();
 
-      log.info(`Starting backend on port ${this.port}`);
+      const { cmd, args, cwd } = this.getBackendCommand();
 
-      const pythonPath = this.getPythonPath();
-      const backendPath = this.getBackendPath();
+      this.log.info('Starting backend:', cmd);
 
-      log.info(`Python path: ${pythonPath}`);
-      log.info(`Backend path: ${backendPath}`);
-
-      // Spawn Python process
-      this.backendProcess = spawn(pythonPath, [backendPath], {
+      const proc = spawn(cmd, args, {
+        cwd,
         env: {
           ...process.env,
-          BACKEND_PORT: this.port.toString(),
-          PYTHONUNBUFFERED: '1',
-          DATA_DIR: app.isPackaged
-            ? path.join(app.getPath('userData'), 'data')
-            : path.join(__dirname, '../data'),
-          ENV: app.isPackaged ? 'production' : 'development',
+          ENV: this.isDev() ? 'development' : 'production',
+          BACKEND_PORT: String(this.port),
+          DATA_DIR: app.getPath('userData'),
         },
-        stdio: ['pipe', 'pipe', 'pipe'],
+        stdio: ['ignore', 'pipe', 'pipe'],
       });
 
-      // Handle stdout
-      this.backendProcess.stdout.on('data', (data) => {
-        const output = data.toString();
-        log.info(`[Backend] ${output}`);
+      this.process = proc;
 
-        if (output.includes('Server started on')) {
-          this.isReady = true;
-          log.info('Backend is ready!');
-        }
+      proc.stdout.on('data', (data) => {
+        this.log.info('[BACKEND]', data.toString().trim());
       });
 
-      // Handle stderr
-      this.backendProcess.stderr.on('data', (data) => {
-        log.error(`[Backend Error] ${data.toString()}`);
+      proc.stderr.on('data', (err) => {
+        this.log.error('[BACKEND ERROR]', err.toString());
       });
 
-      // Handle process exit
-      this.backendProcess.on('close', (code) => {
-        log.warn(`Backend process exited with code ${code}`);
-        this.isReady = false;
-
-        // Auto-restart on crash (with limit)
-        if (code !== 0 && this.retryCount < this.maxRetries) {
-          this.retryCount++;
-          log.info(`Attempting to restart backend (${this.retryCount}/${this.maxRetries})...`);
-          setTimeout(() => this.start(), 2000);
-        }
+      proc.on('exit', (code) => {
+        this.log.error('Backend exited', code);
+        this.running = false;
+        this.process = null;
       });
 
-      // Wait for backend to be ready
-      await this.waitForReady(15000);
+      // 🔒 WAIT UNTIL SERVER IS ACTUALLY READY
+      await this.waitForBackendReady(this.port, STARTUP_TIMEOUT_MS);
 
-      log.info('Backend started successfully');
+      this.running = true;
+      this.store.set('backend.port', this.port);
 
       return {
+        ok: true,
+        running: true,
         port: this.port,
-        baseUrl: `http://localhost:${this.port}`,
+        errorId: null,
       };
-    } catch (error) {
-      log.error('Failed to start backend:', error);
-      throw error;
+    } catch (err) {
+      this.log.error('Backend start failed', err);
+
+      this.running = false;
+      this.port = null;
+
+      if (this.process) {
+        this.process.kill();
+        this.process = null;
+      }
+
+      return {
+        ok: false,
+        running: false,
+        port: null,
+        errorId:
+          err.message === ERROR_IDS.NO_FREE_PORT
+            ? ERROR_IDS.NO_FREE_PORT
+            : err.message === ERROR_IDS.BACKEND_TIMEOUT
+              ? ERROR_IDS.BACKEND_TIMEOUT
+              : ERROR_IDS.BACKEND_START_FAILED,
+      };
     }
   }
 
-  /**
-   * Wait for backend to be ready
-   */
-  async waitForReady(timeout = 10000) {
-    const startTime = Date.now();
-
-    return new Promise((resolve, reject) => {
-      const checkInterval = setInterval(() => {
-        if (this.isReady) {
-          clearInterval(checkInterval);
-          resolve();
-        }
-
-        if (Date.now() - startTime > timeout) {
-          clearInterval(checkInterval);
-          reject(new Error('Backend startup timeout'));
-        }
-      }, 100);
-    });
-  }
-
-  /**
-   * Stop the Python backend
-   */
   async stop() {
-    if (this.backendProcess) {
-      log.info('Stopping backend...');
-      this.backendProcess.kill();
-      this.backendProcess = null;
-      this.isReady = false;
+    if (this.process) {
+      this.process.kill();
+      this.process = null;
     }
+
+    this.running = false;
+    this.port = null;
   }
 
-  /**
-   * Health check
-   */
-  async healthCheck() {
-    if (!this.isReady) {
-      return false;
-    }
-
-    try {
-      const response = await fetch(`http://localhost:${this.port}/health`);
-      return response.ok;
-    } catch (error) {
-      log.error('Health check failed:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Get backend info
-   */
-  getInfo() {
+  getStatus() {
     return {
-      isReady: this.isReady,
+      ok: this.running,
+      running: this.running,
       port: this.port,
-      baseUrl: this.port ? `http://localhost:${this.port}` : null,
+      errorId: this.running ? null : ERROR_IDS.BACKEND_CRASHED,
     };
   }
 }

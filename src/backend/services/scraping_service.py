@@ -6,9 +6,17 @@ from jobspy import scrape_jobs
 import pandas as pd
 
 from database.connection import get_db
+
 from models.scrape_config import ScrapeConfig
 from models.session import SessionStatus
 from models.job import Job
+
+from utils.clean_description import clean_description
+from utils.job_tags import extract_tags
+from utils.compensation_extractor import extract_compensation_from_text
+from utils.number_utils import safe_float
+
+
 
 class ScrapingService:
     def __init__(self):
@@ -192,16 +200,44 @@ class ScrapingService:
                 location_city = location_parts[0] if len(location_parts) > 0 else None
                 location_state = location_parts[1] if len(location_parts) > 1 else None
                 location_country = location_parts[2] if len(location_parts) > 2 else None
+
+                tags = extract_tags(row)
+                tags_json = json.dumps(tags)
+
+                #compensation values
+                raw_description = row.get("description", "")
+                cleaned_description = clean_description(raw_description)
+
+                min_amount = safe_float(row.get("min_amount"))
+                max_amount = safe_float(row.get("max_amount"))
+                currency = row.get("currency")
+                interval = row.get("interval")
+
+                # Fallback ONLY if jobspy didn't give usable salary
+                if min_amount is None and max_amount is None:
+                    extracted_min, extracted_max, extracted_currency, extracted_interval = (
+                        extract_compensation_from_text(cleaned_description)
+                    )
+
+                    min_amount = extracted_min
+                    max_amount = extracted_max
+                    currency = extracted_currency
+                    interval = extracted_interval
+
+                min_amount = float(min_amount) if isinstance(min_amount, (int, float)) else None
+                max_amount = float(max_amount) if isinstance(max_amount, (int, float)) else None
+                currency = currency if isinstance(currency, str) else None
+                interval = interval if isinstance(interval, str) else None
                 
                 # Insert job
                 cursor.execute("""
                     INSERT INTO jobs (
                         session_id, site, title, company, company_url, job_url,
                         location_country, location_city, location_state,
-                        is_remote, description, job_type, interval,
+                        is_remote, description, tags, job_type, interval,
                         min_amount, max_amount, currency, date_posted,
                         emails, job_level, company_industry
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     session_id,
                     str(row.get('site', '')),
@@ -213,12 +249,13 @@ class ScrapingService:
                     location_city,
                     location_state,
                     bool(row.get('is_remote', False)),
-                    str(row.get('description', '')) if pd.notna(row.get('description')) else None,
+                    clean_description(str(row.get('description', ''))) if pd.notna(row.get('description')) else None,
+                    tags_json,
                     str(row.get('job_type', '')) if pd.notna(row.get('job_type')) else None,
-                    str(row.get('interval', '')) if pd.notna(row.get('interval')) else None,
-                    float(row.get('min_amount')) if pd.notna(row.get('min_amount')) else None,
-                    float(row.get('max_amount')) if pd.notna(row.get('max_amount')) else None,
-                    str(row.get('currency', '')) if pd.notna(row.get('currency')) else None,
+                    interval,
+                    min_amount,
+                    max_amount,
+                    currency,  
                     row.get('date_posted') if pd.notna(row.get('date_posted')) else None,
                     str(row.get('emails', '')) if pd.notna(row.get('emails')) else None,
                     str(row.get('job_level', '')) if pd.notna(row.get('job_level')) else None,

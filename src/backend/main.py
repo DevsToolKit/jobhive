@@ -1,38 +1,55 @@
 import os
 import sys
-import uvicorn
+import subprocess
+from pathlib import Path
 
-from config import settings
-from utils.logger import setup_logger
+
+def require_env(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        print(f"ERROR: Required env var '{name}' not set by Electron", file=sys.stderr)
+        sys.exit(1)
+    return value
 
 
 def main():
-    # Production / Electron startup
-    os.environ.setdefault("ENV", "production")
+    require_env("ENV")
+    require_env("BACKEND_PORT")
+    require_env("DATA_DIR")
 
-    # These MUST be provided by Electron
-    if not os.getenv("BACKEND_PORT") or not os.getenv("DATA_DIR"):
-        print("ERROR: BACKEND_PORT and DATA_DIR must be set by Electron", file=sys.stderr)
-        sys.exit(1)
+    port = os.environ["BACKEND_PORT"]
 
-    logger = setup_logger()
-    logger.info("Starting backend (production mode)")
-    logger.info(f"ENV={settings.ENV}")
-    logger.info(f"DATA_DIR={settings.DATA_DIR}")
-    logger.info(f"DB_PATH={settings.DB_PATH}")
-    logger.info(f"PORT={settings.PORT}")
+    # 🔥 Backend root (where app.py lives)
+    backend_root = Path(__file__).parent.resolve()
 
-    # ⚠️ CRITICAL: This message tells Electron the server is ready
-    print(f"Server started on http://{settings.HOST}:{settings.PORT}", flush=True)
-    sys.stdout.flush()
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(backend_root)
 
-    uvicorn.run(
+    cmd = [
+        sys.executable,
+        "-m",
+        "uvicorn",
         "app:app",
-        host=settings.HOST,
-        port=settings.PORT,
-        log_level="info",
-        access_log=False,
+        "--host",
+        "127.0.0.1",
+        "--port",
+        port,
+        "--log-level",
+        "info",
+        "--no-access-log",
+    ]
+
+    # 🚀 Start uvicorn in the backend directory
+    process = subprocess.Popen(
+        cmd,
+        cwd=str(backend_root),
+        env=env,
     )
+
+    # ✅ NOW we can safely notify Electron
+    print(f"Server started on http://127.0.0.1:{port}", flush=True)
+
+    process.wait()
 
 
 if __name__ == "__main__":

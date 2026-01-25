@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     location_state TEXT,
     is_remote BOOLEAN DEFAULT 0,
     description TEXT,
+    tags TEXT,
     job_type TEXT, -- fulltime, parttime, internship, contract
     interval TEXT, -- yearly, monthly, weekly, daily, hourly
     min_amount REAL,

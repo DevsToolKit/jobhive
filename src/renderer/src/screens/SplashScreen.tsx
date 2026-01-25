@@ -1,14 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { Progress } from '@/components/ui/progress';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAppContext } from '@/state/AppContext';
-
-const STEP_LABELS = {
-  checking_internet: 'Checking internet connection...',
-  starting_backend: 'Starting Python backend...',
-  initializing_db: 'Initializing database...',
-  ready: 'Ready!',
-} as const;
+import { useAppContext } from '@/context/app/AppContext';
+import { getStepLabel } from '@/context/app/init/stepRegistry';
 
 export function SplashScreen({ onComplete }: { onComplete?: () => void }) {
   const app = useAppContext();
@@ -40,7 +34,7 @@ export function SplashScreen({ onComplete }: { onComplete?: () => void }) {
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.25 }}
             >
-              {STEP_LABELS[app.currentStep]}
+              {getStepLabel(app.currentStep)}
             </motion.p>
           </AnimatePresence>
         </div>
