@@ -17,12 +17,10 @@ function App() {
   const app = useAppContext();
   const [showSplash, setShowSplash] = useState(true);
 
-  // 1️⃣ Initialization failed → error page
   if (app.error) {
     return <InitErrorScreen />;
   }
 
-  // 2️⃣ Still initializing → splash
   if (app.isLoading || showSplash) {
     return (
       <SplashScreen
@@ -35,7 +33,6 @@ function App() {
     );
   }
 
-  // 3️⃣ App ready → normal routes
   return (
     <BrowserRouter>
       <Routes>

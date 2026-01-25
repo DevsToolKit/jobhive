@@ -1,3 +1,4 @@
+// stepRegistry.ts
 import type { InitStepId } from './types';
 import { INIT_STEPS } from './steps';
 

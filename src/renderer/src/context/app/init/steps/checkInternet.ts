@@ -1,3 +1,4 @@
+// context/app/init/steps/checkInternet.ts
 import type { InitStep } from '../types';
 
 export const checkInternetStep: InitStep = {
@@ -5,7 +6,7 @@ export const checkInternetStep: InitStep = {
   label: 'Checking internet connection',
   progressKey: 'checking_internet',
 
-  async run() {
+  async run(setState) {
     const online = await window.app.check_internet();
     if (!online) {
       throw {

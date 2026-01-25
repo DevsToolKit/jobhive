@@ -16,7 +16,7 @@ function DashboardSkeleton() {
 const CardSkeleton = () => {
   return (
     <div className="w-full h-[400px] bg-gray-100 dark:bg-card animate-pulse rounded-[20px] pb-20 p-1">
-      <div className="w-full h-full mb-20 dark:bg-card-secondary rounded-[18px]"></div>
+      <div className="w-full h-full mb-20 bg-gray-200 dark:bg-card-secondary rounded-[18px]"></div>
     </div>
   );
 };

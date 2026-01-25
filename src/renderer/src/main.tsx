@@ -6,11 +6,11 @@ import { AppProvider } from './context/app/AppContext.tsx';
 import { BackendProvider } from './context/backend/BackendContext.tsx';
 
 createRoot(document.getElementById('root')!).render(
-  <AppProvider>
-    <BackendProvider>
+  <BackendProvider>
+    <AppProvider>
       <ThemeProvider>
         <App />
       </ThemeProvider>
-    </BackendProvider>
-  </AppProvider>
+    </AppProvider>
+  </BackendProvider>
 );

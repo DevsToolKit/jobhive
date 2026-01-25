@@ -1,66 +1,61 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import type { BackendStatus } from './types';
+import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 
-type BackendContextValue = {
-  backend: BackendStatus;
+type BackendStatus = 'idle' | 'starting' | 'ready' | 'error';
+
+interface BackendState {
+  port: number | null;
+  baseUrl: string | null;
+  status: BackendStatus;
+  errorId: string | null;
   refresh: () => Promise<void>;
-};
+}
 
-const BackendContext = createContext<BackendContextValue | undefined>(undefined);
+export const BackendContext = createContext<BackendState | null>(null);
 
-const initialBackendState: BackendStatus = {
-  running: false,
-  port: null,
-  url: null,
-};
+export function BackendProvider({ children }: { children: ReactNode }) {
+  const [port, setPort] = useState<number | null>(null);
+  const [baseUrl, setBaseUrl] = useState<string | null>(null);
+  const [status, setStatus] = useState<BackendStatus>('idle');
+  const [errorId, setErrorId] = useState<string | null>(null);
 
-export function BackendProvider({ children }: { children: React.ReactNode }) {
-  const [backend, setBackend] = useState<BackendStatus>(initialBackendState);
+  const fetchStatus = async () => {
+    try {
+      const result = await window.app.get_backend_status();
 
-  const initializedRef = useRef(false);
+      if (!result.ok || !result.port) {
+        setStatus('error');
+        setErrorId(result.errorId ?? 'UNKNOWN');
+        return;
+      }
 
-  async function fetchBackendStatus() {
-    const status = await window.app.get_backend_status();
+      const url = `http://127.0.0.1:${result.port}`;
 
-    if (!status?.running) {
-      setBackend(initialBackendState);
-      return;
+      setPort(result.port);
+      setBaseUrl(url);
+      setStatus('ready');
+      setErrorId(null);
+    } catch (err) {
+      console.error('Failed to get backend status', err);
+      setStatus('error');
+      setErrorId('STATUS_FAILED');
     }
-
-    const url = `http://127.0.0.1:${status.port}`;
-
-    setBackend({
-      running: true,
-      port: status.port,
-      url,
-    });
-  }
+  };
 
   useEffect(() => {
-    if (initializedRef.current) return;
-    initializedRef.current = true;
-
-    fetchBackendStatus();
+    fetchStatus();
   }, []);
 
   return (
     <BackendContext.Provider
       value={{
-        backend,
-        refresh: fetchBackendStatus,
+        port,
+        baseUrl,
+        status,
+        errorId,
+        refresh: fetchStatus,
       }}
     >
       {children}
     </BackendContext.Provider>
   );
-}
-
-/* ---------------- Hook ---------------- */
-
-export function useBackend() {
-  const ctx = useContext(BackendContext);
-  if (!ctx) {
-    throw new Error('useBackend must be used inside BackendProvider');
-  }
-  return ctx;
 }

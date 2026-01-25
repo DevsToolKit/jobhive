@@ -1,3 +1,4 @@
+// context/app/init/runInitSteps.ts
 import type { InitStep } from './types';
 import type { AppState } from '../types';
 
@@ -18,6 +19,6 @@ export async function runInitSteps(
 
     progress.start(step.progressKey);
 
-    await step.run();
+    await step.run(setState); // Pass setState
   }
 }

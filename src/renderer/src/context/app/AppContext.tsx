@@ -23,13 +23,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       await runInitSteps(INIT_STEPS, setState, progress);
 
       progress.stop();
-      setState({
+      setState((prev) => ({
+        ...prev,
         isLoading: false,
         isInitialized: true,
-        progress: 100,
         currentStep: 'ready',
-        error: null,
-      });
+      }));
     } catch (err: any) {
       progress.stop();
 

@@ -1,3 +1,4 @@
+// steps.ts
 import { checkInternetStep } from './steps/checkInternet';
 import { startBackendStep } from './steps/startBackend';
 import { initDbStep } from './steps/initDb';
