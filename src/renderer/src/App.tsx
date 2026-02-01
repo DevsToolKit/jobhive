@@ -7,8 +7,8 @@ import { SplashScreen } from '@/screens/SplashScreen';
 import { InitErrorScreen } from '@/screens/InitErrorScreen';
 
 import Dashboard from '@/screens/dashboard/Dashboard';
+import HistoryScreen from './screens/jobHistory/HistoryScreen';
 
-const HistoryScreen = () => <div className="p-6">History Screen</div>;
 const PresetsScreen = () => <div className="p-6">Presets Screen</div>;
 const SettingsScreen = () => <div className="p-6">Settings Screen</div>;
 const ResultsScreen = () => <div className="p-6">Results Screen</div>;
