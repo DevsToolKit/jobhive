@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '../ui/button';
 import { GoArrowUpRight } from 'react-icons/go';
 import CardHeader from './CardHeader';
 import { Badge } from '../ui/badge';
 import { Job } from '@/types/job';
+import JobDetailsDrawer from '@/screens/dashboard/Jobdetailsdrawer';
 
 interface JobCardProps {
   job: Job;
@@ -95,39 +96,44 @@ const normalizeSalary = (
 
 /* ---------------- Component ---------------- */
 
-const JobCard = ({ job, tags }: JobCardProps) => {
+const JobCard = React.memo(function JobCard({ job, tags }: JobCardProps) {
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const site = capitalize(job.site);
 
-  console.log(job);
   return (
-    <div className="rounded-[20px] bg-[#f6f5f7] dark:bg-card p-1 w-full">
-      <div className="p-5 bg-white dark:bg-card-secondary rounded-[16px] flex flex-col gap-3">
-        <CardHeader
-          companyName={job.company || 'Not Mentioned'}
-          date={calculateDatePosted(job.date_posted)}
-          company_url={job.company_url}
-        />
+    <>
+      <div className="rounded-[20px] bg-[#f6f5f7] dark:bg-card p-1 w-full">
+        <div className="p-5 bg-white dark:bg-card-secondary rounded-[16px] flex flex-col gap-3">
+          <CardHeader
+            companyName={job.company || 'Not Mentioned'}
+            date={calculateDatePosted(job.date_posted)}
+            company_url={job.company_url}
+          />
 
-        <TagsContainer tags={tags} />
-        <JobDescription title={job.title} description={job.description || 'Not Mentioned'} />
+          <TagsContainer tags={tags} />
+          <JobDescription title={job.title} description={job.description || 'Not Mentioned'} />
+        </div>
+
+        <div className="p-5 flex flex-col gap-3">
+          <h3 className="font-semibold">
+            {normalizeSalary(job.min_amount, job.max_amount, job.currency, job.interval)}
+          </h3>
+
+          <Button className="w-full py-5" variant="outline" onClick={() => setDrawerOpen(true)}>
+            View details
+          </Button>
+
+          <Button className="w-full py-5" onClick={() => window.app.openExternalUrl(job.job_url)}>
+            Apply now on {site} <GoArrowUpRight />
+          </Button>
+        </div>
       </div>
 
-      <div className="p-5 flex flex-col gap-3">
-        <h3 className="font-semibold">
-          {normalizeSalary(job.min_amount, job.max_amount, job.currency, job.interval)}
-        </h3>
-
-        <Button className="w-full py-5" variant="outline">
-          View details
-        </Button>
-
-        <Button className="w-full py-5" onClick={() => window.app.openExternalUrl(job.job_url)}>
-          Apply now on {site} <GoArrowUpRight />
-        </Button>
-      </div>
-    </div>
+      {/* Job Details Drawer */}
+      <JobDetailsDrawer job={job} open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+    </>
   );
-};
+});
 
 /* ---------------- Tags ---------------- */
 

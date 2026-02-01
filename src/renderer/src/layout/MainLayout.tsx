@@ -3,26 +3,25 @@ import { Outlet } from 'react-router-dom';
 import { AppSidebar } from '@/components/layout/app-sidebar';
 import { SiteHeader } from '@/components/layout/site-header';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
-import SearchModal from '@/components/modal/SearchModal';
+import SearchModal from '@/components/searchModal/SearchModal';
+import ScrapeModal from '@/components/scrapeModal/ScrapeModal';
 
 type ModalId = 'search' | 'about' | 'new-scrape';
 
-export function MainLayout() {
-  const [openModal, setOpenModal] = useState<ModalId | null>(null);
-
-  const handleModalOpen = (modalId: string) => {
-    setOpenModal(modalId as ModalId);
-  };
-
-  const handleModalClose = () => {
-    setOpenModal(null);
-  };
-
+export function MainLayout({
+  handleModalOpen,
+  handleModalClose,
+  openModal,
+  setOpenModal,
+}: {
+  handleModalOpen: (modalId: string) => void;
+  handleModalClose: () => void;
+  openModal: ModalId | null;
+  setOpenModal: React.Dispatch<React.SetStateAction<ModalId | null>>;
+}) {
   const handleQuickCreate = () => {
     setOpenModal('new-scrape');
   };
-
-  const [title, setTitle] = useState('');
 
   return (
     <SidebarProvider
@@ -49,7 +48,7 @@ export function MainLayout() {
       {/* Modals - Uncomment when you create them */}
       <SearchModal open={openModal === 'search'} onClose={handleModalClose} />
       {/* <AboutModal open={openModal === 'about'} onClose={handleModalClose} /> */}
-      {/* <NewScrapeModal open={openModal === 'new-scrape'} onClose={handleModalClose} /> */}
+      <ScrapeModal open={openModal === 'new-scrape'} onClose={handleModalClose} />
     </SidebarProvider>
   );
 }

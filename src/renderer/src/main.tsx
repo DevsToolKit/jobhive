@@ -3,14 +3,14 @@ import './index.css';
 import App from './App.tsx';
 import { ThemeProvider } from './theme/theme.context.tsx';
 import { AppProvider } from './context/app/AppContext.tsx';
-import { BackendProvider } from './context/backend/BackendContext.tsx';
+import { DashboardProvider } from './screens/dashboard/DashboardContext.tsx';
 
 createRoot(document.getElementById('root')!).render(
-  <BackendProvider>
-    <AppProvider>
-      <ThemeProvider>
+  <AppProvider>
+    <ThemeProvider>
+      <DashboardProvider>
         <App />
-      </ThemeProvider>
-    </AppProvider>
-  </BackendProvider>
+      </DashboardProvider>
+    </ThemeProvider>
+  </AppProvider>
 );

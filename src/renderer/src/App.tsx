@@ -6,16 +6,28 @@ import { MainLayout } from '@/layout/MainLayout';
 import { SplashScreen } from '@/screens/SplashScreen';
 import { InitErrorScreen } from '@/screens/InitErrorScreen';
 
-import Dashboard from '@/screens/Dashboard';
+import Dashboard from '@/screens/dashboard/Dashboard';
 
 const HistoryScreen = () => <div className="p-6">History Screen</div>;
 const PresetsScreen = () => <div className="p-6">Presets Screen</div>;
 const SettingsScreen = () => <div className="p-6">Settings Screen</div>;
 const ResultsScreen = () => <div className="p-6">Results Screen</div>;
 
+export type ModalId = 'search' | 'about' | 'new-scrape';
+
 function App() {
   const app = useAppContext();
+
   const [showSplash, setShowSplash] = useState(true);
+  const [openModal, setOpenModal] = useState<ModalId | null>(null);
+
+  const handleModalOpen = (modalId: string) => {
+    setOpenModal(modalId as ModalId);
+  };
+
+  const handleModalClose = () => {
+    setOpenModal(null);
+  };
 
   if (app.error) {
     return <InitErrorScreen />;
@@ -36,8 +48,18 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<MainLayout />}>
-          <Route index element={<Dashboard />} />
+        <Route
+          path="/"
+          element={
+            <MainLayout
+              handleModalOpen={handleModalOpen}
+              handleModalClose={handleModalClose}
+              openModal={openModal}
+              setOpenModal={setOpenModal}
+            />
+          }
+        >
+          <Route index element={<Dashboard setOpenModal={setOpenModal} />} />
           <Route path="history" element={<HistoryScreen />} />
           <Route path="presets" element={<PresetsScreen />} />
           <Route path="settings" element={<SettingsScreen />} />
