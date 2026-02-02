@@ -17,7 +17,7 @@
     "build:win": "npm run build:renderer && electron-builder --win",
     "build:mac": "npm run build:renderer && electron-builder --mac",
     "build:linux": "npm run build:renderer && electron-builder --linux",
-    "bundle-backend": "chmod +x scripts/bundle-backend.sh && ./scripts/bundle-backend.sh",
+    "bundle-backend": "powershell -ExecutionPolicy Bypass -File ./scripts/bundle-backend.ps1",
     "postinstall": "electron-builder install-app-deps",
     "clean": "rimraf dist src/renderer/dist",
     "lint": "eslint src/main --ext .js",
