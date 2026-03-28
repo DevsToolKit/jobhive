@@ -60,6 +60,7 @@ jobs:
     if: github.ref == 'refs/heads/develop' && github.event_name != 'pull_request'
     runs-on: windows-latest
     env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
       JOBHIVE_RELEASE_TYPE: prerelease
       JOBHIVE_UPDATE_CHANNEL: beta
       JOBHIVE_UPDATE_GITHUB_OWNER: ${{ github.repository_owner }}

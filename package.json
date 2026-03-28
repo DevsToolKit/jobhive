@@ -1,6 +1,6 @@
 {
   "name": "jobhive",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Local-first job scraping desktop application",
   "main": "src/main/index.js",
   "author": "Piyush Pardeshi",
