@@ -1,16 +1,14 @@
 import NoJobAvailable from '@/components/states/NoJobAvailable';
 import DashboardSkeleton from '@/components/skeleton/DashboardSkeleton';
-import { ModalId } from '@/App';
 import DashboardHeader from './DashboardHeader';
 import DashboardJobsGrid from './DashboardJobsGrid';
 import { useDashboard } from './DashboardContext';
 
 type DashboardProps = {
-  setOpenModal: React.Dispatch<React.SetStateAction<ModalId | null>>;
+  onNewScrape: () => void;
 };
 
-export default function Dashboard({ setOpenModal }: DashboardProps) {
-  // Use the context instead of the hook directly
+export default function Dashboard({ onNewScrape }: DashboardProps) {
   const { session, jobs, isLoading } = useDashboard();
 
   if (isLoading) {
@@ -18,17 +16,12 @@ export default function Dashboard({ setOpenModal }: DashboardProps) {
   }
 
   if (!session || jobs.length === 0) {
-    return <NoJobAvailable setOpenModal={setOpenModal} />;
+    return <NoJobAvailable onNewScrape={onNewScrape} />;
   }
 
   return (
     <section className="px-6 py-3 flex flex-col gap-5">
-      <DashboardHeader
-        session={session}
-        onNewScrape={() => {
-          setOpenModal('new-scrape');
-        }}
-      />
+      <DashboardHeader session={session} onNewScrape={onNewScrape} />
 
       <DashboardJobsGrid jobs={jobs} />
     </section>

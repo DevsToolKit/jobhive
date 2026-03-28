@@ -1,4 +1,3 @@
-import uuid
 import json
 import time
 from typing import Optional, Callable
@@ -22,10 +21,9 @@ class ScrapingService:
     def start_scrape(
         self,
         config: ScrapeConfig,
+        session_id: str,
         progress_callback: Optional[Callable] = None
     ) -> str:
-
-        session_id = str(uuid.uuid4())
         start_time = time.time()
 
         with get_db() as conn:

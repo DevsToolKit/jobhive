@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useBackend } from '@/hooks/useBaseUrl';
-import { fetchSessions } from './api/sessions';
+import { deleteSession, fetchSessions } from './api/sessions';
 import { Session } from './types';
 import { HistoryFilters } from './HistoryFilters';
 import { HistoryTable } from './HistoryTable';
@@ -35,6 +35,17 @@ export default function HistoryScreen() {
     loadSessions();
   }, [baseUrl]);
 
+  const handleDeleteSession = async (sessionId: string) => {
+    if (!baseUrl) return;
+
+    try {
+      await deleteSession(baseUrl, sessionId);
+      setSessions((current) => current.filter((session) => session.id !== sessionId));
+    } catch {
+      setError('Unable to delete history item');
+    }
+  };
+
   const filteredSessions = useMemo(() => {
     return sessions.filter((s) => {
       const matchesSearch =
@@ -64,8 +75,8 @@ export default function HistoryScreen() {
       {!loading && !error && (
         <HistoryTable
           sessions={filteredSessions}
-          onView={(id) => navigate(`/job/${id}`)}
-          onDelete={(id) => console.log('Delete session:', id)}
+          onView={(id) => navigate(`/results/${id}`)}
+          onDelete={handleDeleteSession}
         />
       )}
     </section>

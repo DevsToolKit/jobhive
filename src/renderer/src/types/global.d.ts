@@ -35,14 +35,22 @@ type UpdateStatus = {
   downloadedVersion: string | null;
 };
 
+type UpdatePreferences = {
+  autoCheckOnLaunch: boolean;
+  autoDownload: boolean;
+};
+
 declare global {
   interface Window {
     app: {
       getAppInfo: () => Promise<AppInfo>;
       get_backend_status: () => Promise<BackendStatus>;
       start_backend: () => Promise<BackendStatus>;
+      restart_backend: () => Promise<BackendStatus>;
       check_internet: () => Promise<boolean>;
       getUpdateStatus: () => Promise<UpdateStatus>;
+      getUpdatePreferences: () => Promise<UpdatePreferences>;
+      setUpdatePreferences: (preferences: Partial<UpdatePreferences>) => Promise<UpdatePreferences>;
       check_for_updates: () => Promise<UpdateStatus>;
       download_update: () => Promise<UpdateStatus>;
       quit_and_install_update: () => Promise<{ ok: true }>;

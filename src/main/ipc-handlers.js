@@ -3,7 +3,14 @@ const os = require('os');
 const { exec } = require('child_process');
 
 function createNoopUpdater() {
+  const preferences = {
+    autoCheckOnLaunch: true,
+    autoDownload: true,
+  };
+
   return {
+    getPreferences: () => preferences,
+    setPreferences: (nextPreferences = {}) => Object.assign(preferences, nextPreferences),
     getStatus: () => ({
       ok: true,
       enabled: false,
@@ -45,6 +52,11 @@ function setupIpcHandlers({ backendManager, appUpdater }) {
     return backendManager.start();
   });
 
+  ipcMain.handle('backend:restart', async () => {
+    await backendManager.stop();
+    return backendManager.start();
+  });
+
   ipcMain.handle('backend:status', async () => {
     return backendManager.getStatus();
   });
@@ -62,6 +74,14 @@ function setupIpcHandlers({ backendManager, appUpdater }) {
 
   ipcMain.handle('updater:status', async () => {
     return updater.getStatus();
+  });
+
+  ipcMain.handle('updater:preferences:get', async () => {
+    return updater.getPreferences();
+  });
+
+  ipcMain.handle('updater:preferences:set', async (_, nextPreferences) => {
+    return updater.setPreferences(nextPreferences);
   });
 
   ipcMain.handle('updater:check', async () => {

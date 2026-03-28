@@ -37,8 +37,8 @@ export const navSecondary: NavItem[] = [
   },
   {
     title: 'About',
+    url: '/about',
     icon: GoInfo,
-    action: 'modal',
-    modalId: 'about',
+    action: 'navigate',
   },
 ];

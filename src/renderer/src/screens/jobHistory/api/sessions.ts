@@ -10,3 +10,15 @@ export async function fetchSessions(baseUrl: string): Promise<Session[]> {
 
   return res.json();
 }
+
+export async function deleteSession(baseUrl: string, sessionId: string) {
+  const res = await fetch(`${baseUrl}/api/sessions/${sessionId}`, {
+    method: 'DELETE',
+  });
+
+  if (!res.ok) {
+    throw new Error('Failed to delete session');
+  }
+
+  return res.json();
+}

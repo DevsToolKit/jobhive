@@ -27,6 +27,54 @@ class AppUpdater {
     this.state = { ...DEFAULT_STATUS };
   }
 
+  getPreferences() {
+    return {
+      autoCheckOnLaunch: this.store.get('updates.preferences.autoCheckOnLaunch', true),
+      autoDownload: this.store.get('updates.preferences.autoDownload', true),
+    };
+  }
+
+  syncPolling(autoCheckOnLaunch) {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+
+    if (!autoCheckOnLaunch) {
+      return;
+    }
+
+    this.pollTimer = setInterval(() => {
+      this.checkForUpdates();
+    }, 6 * 60 * 60 * 1000);
+  }
+
+  setPreferences(nextPreferences = {}) {
+    const preferences = {
+      ...this.getPreferences(),
+      ...nextPreferences,
+    };
+
+    this.store.set('updates.preferences.autoCheckOnLaunch', preferences.autoCheckOnLaunch);
+    this.store.set('updates.preferences.autoDownload', preferences.autoDownload);
+
+    if (autoUpdater) {
+      autoUpdater.autoDownload = preferences.autoDownload;
+    }
+
+    this.syncPolling(preferences.autoCheckOnLaunch);
+
+    if (this.state.enabled) {
+      this.setState({
+        message: preferences.autoCheckOnLaunch
+          ? 'Auto-updates are enabled.'
+          : 'Auto-updates are enabled, but automatic checks are turned off.',
+      });
+    }
+
+    return preferences;
+  }
+
   initialize() {
     if (!autoUpdater) {
       this.state = {
@@ -45,8 +93,10 @@ class AppUpdater {
       return;
     }
 
+    const preferences = this.getPreferences();
+
     autoUpdater.logger = this.log;
-    autoUpdater.autoDownload = true;
+    autoUpdater.autoDownload = preferences.autoDownload;
     autoUpdater.autoInstallOnAppQuit = true;
 
     autoUpdater.on('checking-for-update', () => {
@@ -113,13 +163,16 @@ class AppUpdater {
       ok: true,
       enabled: true,
       status: 'idle',
-      message: 'Auto-updates are enabled.',
+      message: preferences.autoCheckOnLaunch
+        ? 'Auto-updates are enabled.'
+        : 'Auto-updates are enabled, but automatic checks are turned off.',
     });
 
-    this.checkForUpdates();
-    this.pollTimer = setInterval(() => {
+    this.syncPolling(preferences.autoCheckOnLaunch);
+
+    if (preferences.autoCheckOnLaunch) {
       this.checkForUpdates();
-    }, 6 * 60 * 60 * 1000);
+    }
   }
 
   dispose() {

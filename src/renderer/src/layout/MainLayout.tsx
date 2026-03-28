@@ -1,27 +1,44 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
+import type { ScrapeDraft } from '@/components/scrapeModal/types';
 import { AppSidebar } from '@/components/layout/app-sidebar';
 import { SiteHeader } from '@/components/layout/site-header';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
-import SearchModal from '@/components/searchModal/SearchModal';
-import ScrapeModal from '@/components/scrapeModal/ScrapeModal';
+import SearchSpotlight from '@/components/searchModal/SearchSpotlight';
+import ScrapeWorkbench from '@/components/scrapeModal/ScrapeWorkbench';
 
-type ModalId = 'search' | 'about' | 'new-scrape';
+type ModalId = 'search' | 'new-scrape';
 
 export function MainLayout({
   handleModalOpen,
   handleModalClose,
   openModal,
-  setOpenModal,
+  scrapeDraft,
+  onDraftConsumed,
+  onRequestNewScrape,
 }: {
   handleModalOpen: (modalId: string) => void;
   handleModalClose: () => void;
   openModal: ModalId | null;
-  setOpenModal: React.Dispatch<React.SetStateAction<ModalId | null>>;
+  scrapeDraft: ScrapeDraft | null;
+  onDraftConsumed: () => void;
+  onRequestNewScrape: (draft?: ScrapeDraft) => void;
 }) {
   const handleQuickCreate = () => {
-    setOpenModal('new-scrape');
+    onRequestNewScrape();
   };
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        handleModalOpen('search');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleModalOpen]);
 
   return (
     <SidebarProvider
@@ -33,22 +50,34 @@ export function MainLayout({
       }
     >
       <AppSidebar variant="inset" onModalOpen={handleModalOpen} onQuickCreate={handleQuickCreate} />
-      <SidebarInset>
-        <SiteHeader />
+      <SidebarInset className="bg-card dark:bg-card/90 overflow-hidden">
+        <SiteHeader
+          onOpenSearch={() => handleModalOpen('search')}
+          onRequestNewScrape={handleQuickCreate}
+        />
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col gap-2">
-            <div className="flex flex-col gap-4 pb-4 md:gap-6 md:pb-6 pt-2!">
-              {/* This is where child routes will render */}
+            <div className="px-3 pb-6 pt-3">
               <Outlet />
+              {/* <div className="min-h-[calc(100vh-var(--header-height)-1.5rem)] rounded-[28px] border border-border/70 bg-card shadow-[0_22px_55px_-40px_rgba(15,23,42,0.28)] dark:bg-card/90 dark:shadow-none">
+                <div className="flex flex-col gap-4 md:gap-6"></div>
+              </div> */}
             </div>
           </div>
         </div>
       </SidebarInset>
 
-      {/* Modals - Uncomment when you create them */}
-      <SearchModal open={openModal === 'search'} onClose={handleModalClose} />
-      {/* <AboutModal open={openModal === 'about'} onClose={handleModalClose} /> */}
-      <ScrapeModal open={openModal === 'new-scrape'} onClose={handleModalClose} />
+      <SearchSpotlight
+        open={openModal === 'search'}
+        onClose={handleModalClose}
+        onRequestScrape={onRequestNewScrape}
+      />
+      <ScrapeWorkbench
+        open={openModal === 'new-scrape'}
+        onClose={handleModalClose}
+        draft={scrapeDraft}
+        onDraftConsumed={onDraftConsumed}
+      />
     </SidebarProvider>
   );
 }

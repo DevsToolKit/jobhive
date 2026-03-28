@@ -5,6 +5,8 @@ import type { NavItem } from '@/types/navigation';
 const allNavItems: NavItem[] = [...navMain, ...navSecondary];
 
 export function getHeaderTitle(pathname: string): string {
+  if (pathname.startsWith('/results/')) return 'Results';
+
   // 1. exact match first
   const exact = allNavItems.find((item) => item.url === pathname);
   if (exact?.title) return exact.title;

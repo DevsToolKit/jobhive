@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 // src/theme/theme.context.tsx
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { Theme } from '@/types/theme.types';
 
 type ThemeContextType = {
@@ -17,27 +17,32 @@ function getSystemTheme(): Theme {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
+function resolveTheme(theme: Theme): 'light' | 'dark' {
+  return theme === 'system' ? getSystemTheme() : theme;
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
-    return stored ?? getSystemTheme();
+    return stored ?? 'system';
   });
 
   // Apply theme to <html>
   useEffect(() => {
     const root = document.documentElement;
+    const appliedTheme = resolveTheme(theme);
 
-    root.classList.toggle('dark', theme === 'dark');
+    root.classList.toggle('dark', appliedTheme === 'dark');
     localStorage.setItem(STORAGE_KEY, theme);
   }, [theme]);
 
-  // Sync if system theme changes (optional but nice)
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)');
 
     const handler = () => {
-      if (!localStorage.getItem(STORAGE_KEY)) {
-        setThemeState(getSystemTheme());
+      if ((localStorage.getItem(STORAGE_KEY) as Theme | null) === 'system') {
+        const root = document.documentElement;
+        root.classList.toggle('dark', getSystemTheme() === 'dark');
       }
     };
 
@@ -45,13 +50,24 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return () => media.removeEventListener('change', handler);
   }, []);
 
-  const setTheme = (theme: Theme) => setThemeState(theme);
-  const toggleTheme = () => setThemeState((t) => (t === 'dark' ? 'light' : 'dark'));
+  const setTheme = useCallback((theme: Theme) => {
+    setThemeState(theme);
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setThemeState((current) => {
+      const resolved = resolveTheme(current);
+      return resolved === 'dark' ? 'light' : 'dark';
+    });
+  }, []);
+
+  const value = useMemo(
+    () => ({ theme, setTheme, toggleTheme }),
+    [setTheme, theme, toggleTheme]
+  );
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>
-      {children}
-    </ThemeContext.Provider>
+    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
   );
 }
 

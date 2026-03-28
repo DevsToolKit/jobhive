@@ -9,12 +9,15 @@ from datetime import datetime
 
 from models.scrape_config import ScrapeRequest, ScrapeConfig
 from services.scraping_service import ScrapingService
+from services.preset_service import PresetService
+from models.preset import PresetCreate
 from core.task_manager import task_manager
 
 router = APIRouter(prefix="/api/scrape", tags=["scraping"])
 
 # Global scraping service instance
 scraping_service = ScrapingService()
+preset_service = PresetService()
 
 @router.post("/start")
 async def start_scrape(request: ScrapeRequest):
@@ -27,12 +30,26 @@ async def start_scrape(request: ScrapeRequest):
     try:
         config = ScrapeConfig(**request.dict())
         session_id = str(uuid.uuid4())
+
+        if request.save_as_preset and request.preset_name:
+            preset_service.create_preset(
+                PresetCreate(
+                    name=request.preset_name,
+                    search_term=request.search_term,
+                    location=request.location,
+                    config=config.dict(),
+                )
+            )
+
+        if request.preset_id:
+            preset_service.update_preset_usage(request.preset_id)
         
         # Submit task with enhanced progress tracking
         task_manager.submit_task(
             session_id,
             scraping_service.start_scrape,
             config,
+            session_id,
             lambda data: task_manager.send_progress(session_id, data)
         )
         
@@ -43,6 +60,8 @@ async def start_scrape(request: ScrapeRequest):
             "message": f"Scraping started. Connect to /api/scrape/progress/{session_id} for updates."
         }
         
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

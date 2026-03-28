@@ -5,7 +5,9 @@ from contextlib import asynccontextmanager
 from database.connection import init_database
 
 from api.health import router as HealthRouter
+from api.presets import router as PresetsRouter
 from api.scrapping import router as ScrapeRouter
+from api.settings import router as SettingsRouter
 from api.sessions import router as SessionsRouter
 
 from utils.logger import logger
@@ -46,7 +48,9 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(HealthRouter)
+    app.include_router(PresetsRouter)
     app.include_router(ScrapeRouter)
+    app.include_router(SettingsRouter)
     app.include_router(SessionsRouter)
     
     # CORS middleware

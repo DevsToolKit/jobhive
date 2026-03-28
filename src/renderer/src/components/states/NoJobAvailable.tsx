@@ -1,13 +1,11 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { GoPlusCircle } from 'react-icons/go';
-import { ModalId } from '@/App';
 
-function NoJobAvailable({
-  setOpenModal,
-}: {
-  setOpenModal: React.Dispatch<React.SetStateAction<ModalId | null>>;
-}) {
+function NoJobAvailable({ onNewScrape }: { onNewScrape: () => void }) {
+  const navigate = useNavigate();
+
   return (
     <div className="w-full h-[88vh] flex flex-col items-center justify-center text-center">
       <div className="max-w-md">
@@ -19,14 +17,12 @@ function NoJobAvailable({
       </div>
 
       <div className="mt-6 flex gap-4">
-        <Button
-          onClick={() => {
-            setOpenModal('new-scrape');
-          }}
-        >
+        <Button onClick={onNewScrape}>
           <GoPlusCircle /> New Scrape
         </Button>
-        <Button variant="outline">View Scrape History</Button>
+        <Button variant="outline" onClick={() => navigate('/history')}>
+          View Scrape History
+        </Button>
       </div>
     </div>
   );

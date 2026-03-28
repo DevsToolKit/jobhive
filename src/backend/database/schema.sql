@@ -54,6 +54,17 @@ CREATE TABLE IF NOT EXISTS presets (
     use_count INTEGER DEFAULT 0
 );
 
+-- Settings table: stores persisted app preferences used by frontend and backend
+CREATE TABLE IF NOT EXISTS app_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    theme TEXT NOT NULL DEFAULT 'system',
+    default_location TEXT NOT NULL DEFAULT '',
+    default_results_wanted INTEGER NOT NULL DEFAULT 20,
+    default_country_indeed TEXT NOT NULL DEFAULT 'india',
+    default_sites TEXT NOT NULL DEFAULT '[]',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_jobs_session_id ON jobs(session_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_site ON jobs(site);

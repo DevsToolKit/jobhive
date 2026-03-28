@@ -19,7 +19,7 @@ function ProductInfo() {
   return (
     <div className="px-3 py-2">
       <span className="text-sm font-medium">JobHive (v{version})</span>
-      <p className="text-[10px] font-mono text-black/50 dark:text-white/50">{buildLabel}</p>
+      <p className="text-muted-foreground text-[10px] font-mono">{buildLabel}</p>
     </div>
   );
 }

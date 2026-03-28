@@ -45,3 +45,4 @@ class ScrapeRequest(ScrapeConfig):
     """Request model for starting a scrape"""
     save_as_preset: Optional[bool] = False
     preset_name: Optional[str] = None
+    preset_id: Optional[str] = None
