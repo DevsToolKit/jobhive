@@ -16,6 +16,8 @@ const store = new Store();
 let mainWindow = null;
 let backendManager = null;
 let appUpdater = null;
+let isShuttingDown = false;
+let shutdownPromise = null;
 
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -101,6 +103,32 @@ async function initialize() {
   }
 }
 
+async function shutdownApp() {
+  if (shutdownPromise) {
+    return shutdownPromise;
+  }
+
+  shutdownPromise = (async () => {
+    isShuttingDown = true;
+
+    if (appUpdater) {
+      appUpdater.dispose();
+    }
+
+    if (backendManager) {
+      await backendManager.stop();
+    }
+  })()
+    .catch((error) => {
+      log.error('Application shutdown failed', error);
+    })
+    .finally(() => {
+      shutdownPromise = null;
+    });
+
+  return shutdownPromise;
+}
+
 process.on('uncaughtException', (error) => {
   reportFatalError('Main process crashed', error);
 });
@@ -136,17 +164,19 @@ app.on('window-all-closed', () => {
 });
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
+  if (!isShuttingDown && BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }
 });
 
-app.on('before-quit', async () => {
-  if (appUpdater) {
-    appUpdater.dispose();
+app.on('before-quit', (event) => {
+  if (isShuttingDown) {
+    return;
   }
 
-  if (backendManager) {
-    await backendManager.stop();
-  }
+  event.preventDefault();
+
+  shutdownApp().finally(() => {
+    app.exit(0);
+  });
 });

@@ -5,22 +5,6 @@ import sys
 from pathlib import Path
 
 
-def check_playwright() -> bool:
-    """Verify that the packaged Playwright browser bundle is available."""
-    try:
-        from playwright.sync_api import sync_playwright
-
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True)
-            browser.close()
-
-        print('Playwright browser bundle verified', flush=True)
-        return True
-    except Exception as exc:
-        print(f'WARNING: Playwright browser verification failed: {exc}', flush=True)
-        return False
-
-
 def require_env(name: str) -> str:
     value = os.getenv(name)
     if not value:
@@ -48,12 +32,6 @@ def main() -> None:
 
     print(f'Starting JobHive Backend in {env_type} mode', flush=True)
     print(f'Data directory: {data_dir}', flush=True)
-
-    if env_type == 'production' and not check_playwright():
-        print(
-            'WARNING: Packaged build is missing Playwright browsers. Run npm run bundle-backend before packaging.',
-            flush=True,
-        )
 
     backend_root = Path(__file__).parent.resolve()
     env = os.environ.copy()

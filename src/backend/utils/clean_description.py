@@ -44,9 +44,8 @@ def clean_description(text: Optional[str]) -> Optional[str]:
     text = re.sub(r"https?://\S+", " ", text)
 
     # Remove boilerplate sections
-    lower = text.lower()
     for pattern in JUNK_PATTERNS:
-        match = re.search(pattern, lower)
+        match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE | re.DOTALL)
         if match:
             text = text[: match.start()]
 

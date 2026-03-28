@@ -14,7 +14,9 @@ def validate_scrape_config(config: ScrapeConfig) -> None:
     # -------------------------
     # Indeed / Glassdoor rules
     # -------------------------
-    if any(site in ["indeed", "glassdoor"] for site in config.sources):
+    site_names = [site.value for site in config.sites]
+
+    if any(site in ["indeed", "glassdoor"] for site in site_names):
         active_filters = [
             bool(config.hours_old),
             bool(config.job_type or config.is_remote),
@@ -30,20 +32,3 @@ def validate_scrape_config(config: ScrapeConfig) -> None:
             raise ScrapeValidationError(
                 "country_indeed is required for Indeed/Glassdoor"
             )
-
-    # -------------------------
-    # LinkedIn rules
-    # -------------------------
-    if "linkedin" in config.sources:
-        if config.hours_old and config.linkedin_fetch_description:
-            raise ScrapeValidationError(
-                "LinkedIn allows only one of: hours_old OR linkedin_fetch_description"
-            )
-
-    # -------------------------
-    # Google rules
-    # -------------------------
-    if "google" in config.sources and not config.google_search_term:
-        raise ScrapeValidationError(
-            "google_search_term is required when using Google jobs"
-        )

@@ -17,6 +17,7 @@ function createNoopUpdater() {
       status: 'idle',
       message: 'Auto-updates are not available yet.',
       currentVersion: app.getVersion(),
+      channel: 'latest',
       updateAvailable: false,
       downloadedVersion: null,
     }),

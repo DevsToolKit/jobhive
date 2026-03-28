@@ -10,6 +10,13 @@ DB_PATH: Path = settings.DB_PATH
 # Ensure directory exists
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
+
+def _connect():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
 def init_database():
     """Initialize database using schema.sql"""
     schema_path = Path(__file__).parent / "schema.sql"
@@ -17,7 +24,7 @@ def init_database():
     with schema_path.open("r", encoding="utf-8") as f:
         schema = f.read()
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = _connect()
     conn.executescript(schema)
     conn.commit()
     conn.close()
@@ -27,8 +34,7 @@ def init_database():
 @contextmanager
 def get_db():
     """Context manager for database connections"""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = _connect()
     try:
         yield conn
     finally:
@@ -37,6 +43,4 @@ def get_db():
 
 def get_connection():
     """Direct database connection"""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return _connect()

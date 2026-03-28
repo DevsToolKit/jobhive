@@ -6,7 +6,7 @@ export const APP_CONFIG = {
   company: 'Piyush Pardeshi',
   repository: {
     label: 'GitHub',
-    url: 'https://github.com/piyushpardeshi',
+    url: 'https://github.com/DevsToolKit/jobhive',
   },
   supportEmail: 'support@jobhive.app',
   versionLabel: 'Production Candidate',

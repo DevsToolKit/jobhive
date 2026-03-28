@@ -31,6 +31,7 @@ type UpdateStatus = {
   status: string;
   message: string;
   currentVersion: string;
+  channel: string;
   updateAvailable: boolean;
   downloadedVersion: string | null;
 };

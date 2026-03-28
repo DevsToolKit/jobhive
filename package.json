@@ -1,6 +1,6 @@
 {
   "name": "jobhive",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Local-first job scraping desktop application",
   "main": "src/main/index.js",
   "author": "Piyush Pardeshi",
@@ -15,14 +15,20 @@
     "build:renderer": "cd src/renderer && npm run build",
     "build:electron": "electron-builder --config electron-builder.config.js",
     "build:win": "npm run bundle-backend && npm run build:renderer && electron-builder --config electron-builder.config.js --win",
+    "build:win:stable": "cross-env JOBHIVE_UPDATE_CHANNEL=latest JOBHIVE_RELEASE_TYPE=release npm run build:win",
+    "build:win:beta": "cross-env JOBHIVE_UPDATE_CHANNEL=beta JOBHIVE_RELEASE_TYPE=prerelease npm run build:win",
     "build:mac": "npm run build:renderer && electron-builder --config electron-builder.config.js --mac",
     "build:linux": "npm run build:renderer && electron-builder --config electron-builder.config.js --linux",
+    "publish:win:stable": "cross-env JOBHIVE_UPDATE_CHANNEL=latest JOBHIVE_RELEASE_TYPE=release npm run bundle-backend && npm run build:renderer && electron-builder --config electron-builder.config.js --win --publish always",
+    "publish:win:beta": "cross-env JOBHIVE_UPDATE_CHANNEL=beta JOBHIVE_RELEASE_TYPE=prerelease npm run bundle-backend && npm run build:renderer && electron-builder --config electron-builder.config.js --win --publish always",
     "bundle-backend": "powershell -ExecutionPolicy Bypass -File ./scripts/bundle-backend.ps1",
     "postinstall": "electron-builder install-app-deps",
     "clean": "rimraf dist src/renderer/dist",
     "lint": "eslint src/main --ext .js",
     "format": "prettier --write \"src/main/**/*.js\"",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "python -m pytest tests/backend",
+    "test:frontend": "npm --prefix src/renderer run test:run"
   },
   "dependencies": {
     "electron-log": "^5.4.3",
@@ -110,7 +116,7 @@
           ]
         }
       ],
-      "icon": "resources/icons/icon.ico"
+      "icon": "resources/icon.ico"
     },
     "linux": {
       "target": [

@@ -12,6 +12,95 @@ $PYTHON_DIR = Join-Path $FULL_RUNTIME_PATH 'python'
 $PYTHON_ZIP = Join-Path $FULL_RUNTIME_PATH 'python.zip'
 $REQUIREMENTS_PATH = Join-Path $PROJECT_ROOT "$BACKEND_DIR\requirements.txt"
 
+function Remove-IfExists {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    if (Test-Path $Path) {
+        Remove-Item -LiteralPath $Path -Recurse -Force
+    }
+}
+
+function Remove-ChildrenByPattern {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Parent,
+        [Parameter(Mandatory = $true)]
+        [string[]]$Patterns
+    )
+
+    if (-not (Test-Path $Parent)) {
+        return
+    }
+
+    foreach ($pattern in $Patterns) {
+        Get-ChildItem -Path $Parent -Filter $pattern -Force -ErrorAction SilentlyContinue |
+            ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force }
+    }
+}
+
+function Remove-MatchingDirectories {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Parent,
+        [Parameter(Mandatory = $true)]
+        [string[]]$Names
+    )
+
+    if (-not (Test-Path $Parent)) {
+        return
+    }
+
+    Get-ChildItem -Path $Parent -Directory -Recurse -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -in $Names } |
+        ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force }
+}
+
+function Optimize-PackagedRuntime {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$PythonDir
+    )
+
+    $sitePackagesDir = Join-Path $PythonDir 'Lib\site-packages'
+    $scriptsDir = Join-Path $PythonDir 'Scripts'
+    $tlsClientDependenciesDir = Join-Path $sitePackagesDir 'tls_client\dependencies'
+
+    Write-Host 'Pruning unused packaging files from bundled runtime...' -ForegroundColor Cyan
+
+    Remove-IfExists $scriptsDir
+    Remove-IfExists (Join-Path $sitePackagesDir 'pip')
+    Remove-IfExists (Join-Path $sitePackagesDir 'setuptools')
+    Remove-IfExists (Join-Path $sitePackagesDir 'wheel')
+    Remove-IfExists (Join-Path $sitePackagesDir 'pkg_resources')
+
+    Remove-ChildrenByPattern -Parent $sitePackagesDir -Patterns @(
+        'pip-*.dist-info',
+        'setuptools-*.dist-info',
+        'wheel-*.dist-info'
+    )
+
+    Remove-MatchingDirectories -Parent $sitePackagesDir -Names @('__pycache__', 'tests', 'test')
+
+    Get-ChildItem -Path $sitePackagesDir -Recurse -File -Filter '*.pyc' -Force -ErrorAction SilentlyContinue |
+        ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
+
+    if (Test-Path $tlsClientDependenciesDir) {
+        @(
+            'tls-client-32.dll',
+            'tls-client-amd64.so',
+            'tls-client-x86.so',
+            'tls-client-arm64.so',
+            'tls-client-x86.dylib',
+            'tls-client-arm64.dylib'
+        ) | ForEach-Object {
+            Remove-IfExists (Join-Path $tlsClientDependenciesDir $_)
+        }
+    }
+}
+
 if (-not (Test-Path $REQUIREMENTS_PATH)) {
     throw "requirements.txt not found at $REQUIREMENTS_PATH"
 }
@@ -35,17 +124,18 @@ if (Test-Path $PTH_FILE) {
     $content = Get-Content $PTH_FILE
     $content = $content -replace '#import site', 'import site'
     $content = $content -replace '# import site', 'import site'
-    Set-Content -Path $PTH_FILE -Value $content -Encoding UTF8
+    Set-Content -Path $PTH_FILE -Value $content -Encoding ASCII
 } else {
     @"
 python$PYTHON_MAJOR_MINOR.zip
 .
 import site
-"@ | Set-Content -Path $PTH_FILE -Encoding UTF8
+"@ | Set-Content -Path $PTH_FILE -Encoding ASCII
 }
 
 $pythonExe = Join-Path $PYTHON_DIR 'python.exe'
 $GET_PIP_PATH = Join-Path $PYTHON_DIR 'get-pip.py'
+$env:PYTHONNOUSERSITE = '1'
 
 Write-Host 'Installing pip...' -ForegroundColor Cyan
 Invoke-WebRequest -Uri 'https://bootstrap.pypa.io/get-pip.py' -OutFile $GET_PIP_PATH -UseBasicParsing
@@ -59,57 +149,36 @@ Remove-Item -LiteralPath $GET_PIP_PATH -Force
 Pop-Location
 
 Write-Host 'Upgrading packaging tooling...' -ForegroundColor Cyan
-& $pythonExe -m pip install --upgrade pip setuptools wheel --no-warn-script-location
+& $pythonExe -m pip install --upgrade pip setuptools wheel --ignore-installed --no-warn-script-location --no-cache-dir --no-compile
 if ($LASTEXITCODE -ne 0) {
     throw "pip tooling upgrade failed with exit code $LASTEXITCODE"
 }
 
 Write-Host 'Installing backend dependencies...' -ForegroundColor Cyan
-& $pythonExe -m pip install -r $REQUIREMENTS_PATH --no-warn-script-location
+& $pythonExe -m pip install -r $REQUIREMENTS_PATH --ignore-installed --no-warn-script-location --no-cache-dir --no-compile
 if ($LASTEXITCODE -ne 0) {
     throw "backend dependency installation failed with exit code $LASTEXITCODE"
-}
-
-Write-Host 'Installing Playwright Chromium bundle for offline packaging...' -ForegroundColor Cyan
-$previousPlaywrightPath = $env:PLAYWRIGHT_BROWSERS_PATH
-$env:PLAYWRIGHT_BROWSERS_PATH = '0'
-& $pythonExe -m playwright install chromium
-if ($LASTEXITCODE -ne 0) {
-    if ($null -eq $previousPlaywrightPath) {
-        Remove-Item Env:PLAYWRIGHT_BROWSERS_PATH -ErrorAction SilentlyContinue
-    } else {
-        $env:PLAYWRIGHT_BROWSERS_PATH = $previousPlaywrightPath
-    }
-    throw "Playwright browser installation failed with exit code $LASTEXITCODE"
 }
 
 Write-Host 'Verifying packaged runtime...' -ForegroundColor Cyan
 & $pythonExe --version
 & $pythonExe -m pip list
-& $pythonExe -c "import fastapi, uvicorn, playwright; print('fastapi', fastapi.__version__); print('uvicorn', uvicorn.__version__); print('playwright', playwright.__version__)"
+& $pythonExe -c "import colorama, fastapi, pandas, tls_client, uvicorn; print('fastapi', fastapi.__version__); print('uvicorn', uvicorn.__version__); print('runtime imports verified')"
 if ($LASTEXITCODE -ne 0) {
-    if ($null -eq $previousPlaywrightPath) {
-        Remove-Item Env:PLAYWRIGHT_BROWSERS_PATH -ErrorAction SilentlyContinue
-    } else {
-        $env:PLAYWRIGHT_BROWSERS_PATH = $previousPlaywrightPath
-    }
     throw 'Python package verification failed'
 }
 
-& $pythonExe -c "from playwright.sync_api import sync_playwright; p = sync_playwright().start(); browser = p.chromium.launch(headless=True); browser.close(); p.stop(); print('playwright browser verified')"
+& $pythonExe -c "import tls_client; session = tls_client.Session(client_identifier='chrome120'); session.close(); print('tls-client verified')"
 if ($LASTEXITCODE -ne 0) {
-    if ($null -eq $previousPlaywrightPath) {
-        Remove-Item Env:PLAYWRIGHT_BROWSERS_PATH -ErrorAction SilentlyContinue
-    } else {
-        $env:PLAYWRIGHT_BROWSERS_PATH = $previousPlaywrightPath
-    }
-    throw 'Playwright browser verification failed'
+    throw 'TLS client verification failed'
 }
 
-if ($null -eq $previousPlaywrightPath) {
-    Remove-Item Env:PLAYWRIGHT_BROWSERS_PATH -ErrorAction SilentlyContinue
-} else {
-    $env:PLAYWRIGHT_BROWSERS_PATH = $previousPlaywrightPath
+Optimize-PackagedRuntime -PythonDir $PYTHON_DIR
+
+Write-Host 'Verifying optimized runtime...' -ForegroundColor Cyan
+& $pythonExe -c "import colorama, fastapi, pandas, tls_client, uvicorn; session = tls_client.Session(client_identifier='chrome120'); session.close(); print('optimized runtime imports verified')"
+if ($LASTEXITCODE -ne 0) {
+    throw 'Optimized runtime verification failed'
 }
 
 Write-Host ''

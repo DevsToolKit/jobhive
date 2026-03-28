@@ -1,5 +1,6 @@
 ﻿const { spawn } = require('child_process');
 const dns = require('dns');
+const { execFile } = require('child_process');
 const fs = require('fs');
 const http = require('http');
 const net = require('net');
@@ -34,6 +35,18 @@ class BackendManager {
     this.lastError = null;
     this.stdoutBuffer = [];
     this.stderrBuffer = [];
+  }
+
+  taskKillWindowsProcessTree(pid) {
+    return new Promise((resolve) => {
+      execFile('taskkill', ['/pid', String(pid), '/t', '/f'], { windowsHide: true }, (error) => {
+        if (error) {
+          this.log.warn('taskkill failed for backend process tree', { pid, message: error.message });
+        }
+
+        resolve(true);
+      });
+    });
   }
 
   isDev() {
@@ -250,7 +263,6 @@ class BackendManager {
           PYTHONPATH: cwd,
           PYTHONUNBUFFERED: '1',
           PYTHONIOENCODING: 'utf-8',
-          PLAYWRIGHT_BROWSERS_PATH: '0',
         },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
@@ -382,6 +394,7 @@ class BackendManager {
     }
 
     const proc = this.process;
+    const pid = proc.pid;
     this.process = null;
     this.running = false;
     this.stopping = true;
@@ -397,9 +410,8 @@ class BackendManager {
         resolve(true);
       };
 
-      proc.once('exit', () => {
-        done();
-      });
+      proc.once('exit', done);
+      proc.once('close', done);
 
       try {
         proc.kill('SIGTERM');
@@ -410,6 +422,13 @@ class BackendManager {
 
       setTimeout(() => {
         if (settled) {
+          return;
+        }
+
+        if (process.platform === 'win32' && pid) {
+          this.taskKillWindowsProcessTree(pid)
+            .then(() => done())
+            .catch(() => done());
           return;
         }
 

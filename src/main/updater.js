@@ -1,5 +1,7 @@
 ﻿const { app } = require('electron');
 
+const semver = require('semver');
+
 let autoUpdater = null;
 
 try {
@@ -14,9 +16,24 @@ const DEFAULT_STATUS = {
   status: 'idle',
   message: 'Auto-updates are not configured.',
   currentVersion: app.getVersion(),
+  channel: 'latest',
   updateAvailable: false,
   downloadedVersion: null,
 };
+
+function normalizeChannel(value) {
+  return value?.trim().toLowerCase() || null;
+}
+
+function getVersionChannel(version) {
+  const prerelease = semver.prerelease(version);
+
+  if (!prerelease || prerelease.length === 0) {
+    return 'latest';
+  }
+
+  return String(prerelease[0]).toLowerCase();
+}
 
 class AppUpdater {
   constructor({ log, store, getWindow }) {
@@ -24,7 +41,8 @@ class AppUpdater {
     this.store = store;
     this.getWindow = getWindow;
     this.pollTimer = null;
-    this.state = { ...DEFAULT_STATUS };
+    this.channel = normalizeChannel(process.env.JOBHIVE_UPDATE_CHANNEL) || getVersionChannel(app.getVersion());
+    this.state = { ...DEFAULT_STATUS, channel: this.channel };
   }
 
   getPreferences() {
@@ -75,10 +93,50 @@ class AppUpdater {
     return preferences;
   }
 
+  configureAutoUpdater(preferences) {
+    const isPrereleaseChannel = this.channel !== 'latest';
+
+    autoUpdater.logger = this.log;
+    autoUpdater.autoDownload = preferences.autoDownload;
+    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.fullChangelog = true;
+    autoUpdater.allowPrerelease = isPrereleaseChannel;
+
+    if (isPrereleaseChannel) {
+      autoUpdater.channel = this.channel;
+    }
+
+    // Avoid automatic downgrades when moving between channels.
+    autoUpdater.allowDowngrade = false;
+
+    this.log.info(
+      {
+        currentVersion: app.getVersion(),
+        channel: this.channel,
+        allowPrerelease: autoUpdater.allowPrerelease,
+      },
+      'Configured auto-updater channel'
+    );
+  }
+
+  getActionableErrorMessage(error) {
+    const message = error?.message || 'Auto-update failed.';
+
+    if (
+      this.channel === 'latest' &&
+      /Unable to find latest version on GitHub|Cannot parse releases feed|HTTP 406/i.test(message)
+    ) {
+      return 'No stable GitHub release is available for the stable update channel. GitHub /releases/latest ignores prereleases, so publish a non-prerelease release or ship this build on the beta channel.';
+    }
+
+    return message;
+  }
+
   initialize() {
     if (!autoUpdater) {
       this.state = {
         ...DEFAULT_STATUS,
+        channel: this.channel,
         message: 'electron-updater is not installed. Run npm install to enable auto-updates.',
       };
       this.log.warn(this.state.message);
@@ -88,6 +146,7 @@ class AppUpdater {
     if (!app.isPackaged) {
       this.state = {
         ...DEFAULT_STATUS,
+        channel: this.channel,
         message: 'Auto-updates are disabled in development mode.',
       };
       return;
@@ -95,15 +154,14 @@ class AppUpdater {
 
     const preferences = this.getPreferences();
 
-    autoUpdater.logger = this.log;
-    autoUpdater.autoDownload = preferences.autoDownload;
-    autoUpdater.autoInstallOnAppQuit = true;
+    this.configureAutoUpdater(preferences);
 
     autoUpdater.on('checking-for-update', () => {
       this.setState({
         ok: true,
         enabled: true,
         status: 'checking',
+        channel: this.channel,
         message: 'Checking for updates...',
       });
     });
@@ -113,6 +171,7 @@ class AppUpdater {
         ok: true,
         enabled: true,
         status: 'available',
+        channel: this.channel,
         message: `Update ${info.version} is available and downloading.`,
         updateAvailable: true,
       });
@@ -123,6 +182,7 @@ class AppUpdater {
         ok: true,
         enabled: true,
         status: 'idle',
+        channel: this.channel,
         message: 'You are on the latest version.',
         updateAvailable: false,
       });
@@ -133,6 +193,7 @@ class AppUpdater {
         ok: true,
         enabled: true,
         status: 'downloading',
+        channel: this.channel,
         message: `Downloading update: ${Math.round(progress.percent)}%`,
         updateAvailable: true,
       });
@@ -143,6 +204,7 @@ class AppUpdater {
         ok: true,
         enabled: true,
         status: 'downloaded',
+        channel: this.channel,
         message: `Update ${info.version} is ready to install.`,
         updateAvailable: true,
         downloadedVersion: info.version,
@@ -155,7 +217,8 @@ class AppUpdater {
         ok: false,
         enabled: true,
         status: 'error',
-        message: error?.message || 'Auto-update failed.',
+        channel: this.channel,
+        message: this.getActionableErrorMessage(error),
       });
     });
 
@@ -163,6 +226,7 @@ class AppUpdater {
       ok: true,
       enabled: true,
       status: 'idle',
+      channel: this.channel,
       message: preferences.autoCheckOnLaunch
         ? 'Auto-updates are enabled.'
         : 'Auto-updates are enabled, but automatic checks are turned off.',
@@ -195,7 +259,8 @@ class AppUpdater {
         ok: false,
         enabled: true,
         status: 'error',
-        message: error?.message || 'Failed to check for updates.',
+        channel: this.channel,
+        message: this.getActionableErrorMessage(error),
       });
     }
 
@@ -215,7 +280,8 @@ class AppUpdater {
         ok: false,
         enabled: true,
         status: 'error',
-        message: error?.message || 'Failed to download update.',
+        channel: this.channel,
+        message: this.getActionableErrorMessage(error),
       });
     }
 
@@ -232,6 +298,7 @@ class AppUpdater {
     return {
       ...this.state,
       currentVersion: app.getVersion(),
+      channel: this.channel,
     };
   }
 
@@ -240,6 +307,7 @@ class AppUpdater {
       ...this.state,
       ...nextState,
       currentVersion: app.getVersion(),
+      channel: this.channel,
     };
 
     this.store.set('updates.state', this.state);
