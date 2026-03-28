@@ -1,9 +1,42 @@
-// ipc-handlers.js
-const { ipcMain, shell } = require('electron');
+﻿const { app, ipcMain, shell } = require('electron');
 const os = require('os');
 const { exec } = require('child_process');
 
-function setupIpcHandlers({ backendManager }) {
+function createNoopUpdater() {
+  return {
+    getStatus: () => ({
+      ok: true,
+      enabled: false,
+      status: 'idle',
+      message: 'Auto-updates are not available yet.',
+      currentVersion: app.getVersion(),
+      updateAvailable: false,
+      downloadedVersion: null,
+    }),
+    checkForUpdates: async function () {
+      return this.getStatus();
+    },
+    downloadUpdate: async function () {
+      return this.getStatus();
+    },
+    quitAndInstall: () => {},
+  };
+}
+
+function normalizeUrl(rawUrl) {
+  const url = new URL(rawUrl);
+  const allowedProtocols = new Set(['http:', 'https:', 'mailto:']);
+
+  if (!allowedProtocols.has(url.protocol)) {
+    throw new Error(`Unsupported external URL protocol: ${url.protocol}`);
+  }
+
+  return url.toString();
+}
+
+function setupIpcHandlers({ backendManager, appUpdater }) {
+  const updater = appUpdater || createNoopUpdater();
+
   ipcMain.handle('backend:check-internet', async () => {
     return backendManager.checkInternet();
   });
@@ -16,12 +49,42 @@ function setupIpcHandlers({ backendManager }) {
     return backendManager.getStatus();
   });
 
-  ipcMain.handle('open-external-url', async (_, url) => {
+  ipcMain.handle('app:get-info', async () => {
+    return {
+      name: app.getName(),
+      version: app.getVersion(),
+      isPackaged: app.isPackaged,
+      platform: process.platform,
+      logsPath: app.getPath('logs'),
+      userDataPath: app.getPath('userData'),
+    };
+  });
+
+  ipcMain.handle('updater:status', async () => {
+    return updater.getStatus();
+  });
+
+  ipcMain.handle('updater:check', async () => {
+    return updater.checkForUpdates();
+  });
+
+  ipcMain.handle('updater:download', async () => {
+    return updater.downloadUpdate();
+  });
+
+  ipcMain.handle('updater:quit-and-install', async () => {
+    updater.quitAndInstall();
+    return { ok: true };
+  });
+
+  ipcMain.handle('open-external-url', async (_, rawUrl) => {
+    const url = normalizeUrl(rawUrl);
+
     try {
       await shell.openExternal(url, { activate: true });
-      return; // 👈 THIS stops the fallback
-    } catch (err) {
-      console.error('shell.openExternal failed, trying fallback:', err);
+      return { ok: true };
+    } catch (error) {
+      console.error('shell.openExternal failed, trying fallback:', error);
     }
 
     const platform = os.platform();
@@ -39,6 +102,8 @@ function setupIpcHandlers({ backendManager }) {
         if (error) console.error('Linux fallback failed:', error);
       });
     }
+
+    return { ok: true };
   });
 }
 

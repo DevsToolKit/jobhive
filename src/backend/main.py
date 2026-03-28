@@ -1,56 +1,95 @@
-import os
-import sys
+﻿import os
+import signal
 import subprocess
+import sys
 from pathlib import Path
+
+
+def check_playwright() -> bool:
+    """Verify that the packaged Playwright browser bundle is available."""
+    try:
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            browser.close()
+
+        print('Playwright browser bundle verified', flush=True)
+        return True
+    except Exception as exc:
+        print(f'WARNING: Playwright browser verification failed: {exc}', flush=True)
+        return False
 
 
 def require_env(name: str) -> str:
     value = os.getenv(name)
     if not value:
-        print(f"ERROR: Required env var '{name}' not set by Electron", file=sys.stderr)
+        print(f"ERROR: Required env var '{name}' not set by Electron", file=sys.stderr, flush=True)
         sys.exit(1)
     return value
 
 
-def main():
-    require_env("ENV")
-    require_env("BACKEND_PORT")
-    require_env("DATA_DIR")
+def terminate_process(process: subprocess.Popen) -> int:
+    if process.poll() is not None:
+        return process.returncode or 0
 
-    port = os.environ["BACKEND_PORT"]
+    process.terminate()
+    try:
+        return process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        return process.wait(timeout=5)
 
-    # 🔥 Backend root (where app.py lives)
+
+def main() -> None:
+    env_type = require_env('ENV')
+    port = require_env('BACKEND_PORT')
+    data_dir = require_env('DATA_DIR')
+
+    print(f'Starting JobHive Backend in {env_type} mode', flush=True)
+    print(f'Data directory: {data_dir}', flush=True)
+
+    if env_type == 'production' and not check_playwright():
+        print(
+            'WARNING: Packaged build is missing Playwright browsers. Run npm run bundle-backend before packaging.',
+            flush=True,
+        )
+
     backend_root = Path(__file__).parent.resolve()
-
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(backend_root)
+    env['PYTHONPATH'] = str(backend_root)
 
     cmd = [
         sys.executable,
-        "-m",
-        "uvicorn",
-        "app:app",
-        "--host",
-        "127.0.0.1",
-        "--port",
+        '-m',
+        'uvicorn',
+        'app:app',
+        '--host',
+        '127.0.0.1',
+        '--port',
         port,
-        "--log-level",
-        "info",
-        "--no-access-log",
+        '--log-level',
+        'info',
+        '--no-access-log',
     ]
 
-    # 🚀 Start uvicorn in the backend directory
-    process = subprocess.Popen(
-        cmd,
-        cwd=str(backend_root),
-        env=env,
-    )
+    process = subprocess.Popen(cmd, cwd=str(backend_root), env=env)
+    print(f'Server starting on http://127.0.0.1:{port}', flush=True)
 
-    # ✅ NOW we can safely notify Electron
-    print(f"Server started on http://127.0.0.1:{port}", flush=True)
+    def signal_handler(signum, _frame):
+        print(f'Received shutdown signal ({signum}), stopping backend...', flush=True)
+        exit_code = terminate_process(process)
+        sys.exit(exit_code)
 
-    process.wait()
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
+    try:
+        sys.exit(process.wait())
+    except KeyboardInterrupt:
+        print('Keyboard interrupt received, stopping backend...', flush=True)
+        sys.exit(terminate_process(process))
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

@@ -1,7 +1,12 @@
-// context/app/types.ts
-export type AppError = {
+﻿export type AppError = {
   id: string;
   message: string;
+  details?: string | null;
+  logsPath?: string | null;
+  diagnostics?: {
+    stdout: string[];
+    stderr: string[];
+  } | null;
 };
 
 export interface AppState {
@@ -10,8 +15,6 @@ export interface AppState {
   progress: number;
   currentStep: 'checking_internet' | 'starting_backend' | 'initializing_db' | 'ready';
   error: AppError | null;
-
-  // Add backend info
   backendPort: number | null;
   backendBaseUrl: string | null;
 }

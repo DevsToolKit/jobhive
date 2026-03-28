@@ -13,10 +13,10 @@
     "dev:electron": "wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .",
     "build": "npm run build:renderer && npm run build:electron",
     "build:renderer": "cd src/renderer && npm run build",
-    "build:electron": "electron-builder",
-    "build:win": "npm run build:renderer && electron-builder --win",
-    "build:mac": "npm run build:renderer && electron-builder --mac",
-    "build:linux": "npm run build:renderer && electron-builder --linux",
+    "build:electron": "electron-builder --config electron-builder.config.js",
+    "build:win": "npm run bundle-backend && npm run build:renderer && electron-builder --config electron-builder.config.js --win",
+    "build:mac": "npm run build:renderer && electron-builder --config electron-builder.config.js --mac",
+    "build:linux": "npm run build:renderer && electron-builder --config electron-builder.config.js --linux",
     "bundle-backend": "powershell -ExecutionPolicy Bypass -File ./scripts/bundle-backend.ps1",
     "postinstall": "electron-builder install-app-deps",
     "clean": "rimraf dist src/renderer/dist",
@@ -26,7 +26,8 @@
   },
   "dependencies": {
     "electron-log": "^5.4.3",
-    "electron-store": "^11.0.2"
+    "electron-store": "^11.0.2",
+    "electron-updater": "^6.8.3"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

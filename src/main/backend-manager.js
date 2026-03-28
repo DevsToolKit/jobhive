@@ -1,9 +1,9 @@
-// backend-manager.js
-const { spawn } = require('child_process');
-const net = require('net');
+﻿const { spawn } = require('child_process');
 const dns = require('dns');
-const path = require('path');
 const fs = require('fs');
+const http = require('http');
+const net = require('net');
+const path = require('path');
 const { app } = require('electron');
 
 const ERROR_IDS = {
@@ -13,9 +13,14 @@ const ERROR_IDS = {
   BACKEND_START_FAILED: 'BACKEND_START_FAILED',
   BACKEND_CRASHED: 'BACKEND_CRASHED',
   BACKEND_TIMEOUT: 'BACKEND_TIMEOUT',
+  BACKEND_FILES_MISSING: 'BACKEND_FILES_MISSING',
+  PYTHON_RUNTIME_MISSING: 'PYTHON_RUNTIME_MISSING',
 };
 
-const STARTUP_TIMEOUT_MS = 15_000;
+const STARTUP_TIMEOUT_MS = 30_000;
+const STOP_TIMEOUT_MS = 5_000;
+const HEALTH_PATH = '/api/health';
+const MAX_LOG_LINES = 50;
 
 class BackendManager {
   constructor({ store, log }) {
@@ -25,48 +30,78 @@ class BackendManager {
     this.process = null;
     this.port = null;
     this.running = false;
+    this.stopping = false;
+    this.lastError = null;
+    this.stdoutBuffer = [];
+    this.stderrBuffer = [];
   }
-
-  /* ---------------- Environment ---------------- */
 
   isDev() {
-    return !app.isPackaged;
+    return !app.isPackaged || process.env.NODE_ENV === 'development';
   }
 
-  /**
-   * Get paths to Python runtime and backend
-   */
-  getPaths() {
+  getLogsPath() {
+    return app.getPath('logs');
+  }
+
+  createError(id, message, details = {}) {
+    const error = new Error(message);
+    error.id = id;
+    error.details = details;
+    return error;
+  }
+
+  rememberOutput(target, chunk) {
+    const lines = chunk
+      .toString()
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    if (!lines.length) {
+      return;
+    }
+
+    target.push(...lines);
+    if (target.length > MAX_LOG_LINES) {
+      target.splice(0, target.length - MAX_LOG_LINES);
+    }
+  }
+
+  resolvePythonExecutable() {
     if (this.isDev()) {
-      return {
-        pythonExe: 'python', // Use system Python in dev
-        backendDir: path.join(__dirname, '../../backend'),
-        mainScript: path.join(__dirname, '../../backend/main.py'),
-      };
+      return process.env.JOBHIVE_PYTHON_PATH || (process.platform === 'win32' ? 'python' : 'python3');
     }
 
-    // Production: use bundled Python
-    const resourcesPath = process.resourcesPath;
-    const pythonExe = path.join(resourcesPath, 'python-runtime', 'python', 'python.exe');
-    const backendDir = path.join(resourcesPath, 'backend');
+    const runtimeRoot = path.join(process.resourcesPath, 'python-runtime', 'python');
+    return process.platform === 'win32'
+      ? path.join(runtimeRoot, 'python.exe')
+      : path.join(runtimeRoot, 'bin', 'python3');
+  }
+
+  getPaths() {
+    const backendDir = this.isDev()
+      ? path.join(app.getAppPath(), 'src', 'backend')
+      : path.join(process.resourcesPath, 'backend');
     const mainScript = path.join(backendDir, 'main.py');
+    const pythonExe = this.resolvePythonExecutable();
 
-    this.log.info('Python executable:', pythonExe);
-    this.log.info('Backend directory:', backendDir);
-    this.log.info('Main script:', mainScript);
-
-    // Verify paths exist
-    if (!fs.existsSync(pythonExe)) {
-      this.log.error('Python executable not found:', pythonExe);
-      throw new Error('Python runtime not found');
-    }
     if (!fs.existsSync(backendDir)) {
-      this.log.error('Backend directory not found:', backendDir);
-      throw new Error('Backend not found');
+      throw this.createError(ERROR_IDS.BACKEND_FILES_MISSING, 'Backend directory is missing.', {
+        backendDir,
+      });
     }
+
     if (!fs.existsSync(mainScript)) {
-      this.log.error('main.py not found:', mainScript);
-      throw new Error('Backend main.py not found');
+      throw this.createError(ERROR_IDS.BACKEND_FILES_MISSING, 'Backend entrypoint main.py is missing.', {
+        mainScript,
+      });
+    }
+
+    if (!this.isDev() && !fs.existsSync(pythonExe)) {
+      throw this.createError(ERROR_IDS.PYTHON_RUNTIME_MISSING, 'Bundled Python runtime is missing.', {
+        pythonExe,
+      });
     }
 
     return { pythonExe, backendDir, mainScript };
@@ -75,26 +110,6 @@ class BackendManager {
   getBackendCommand() {
     const { pythonExe, backendDir, mainScript } = this.getPaths();
 
-    if (this.isDev()) {
-      // Development: use uvicorn directly
-      return {
-        cmd: pythonExe,
-        args: [
-          '-m',
-          'uvicorn',
-          'app:app',
-          '--host',
-          '127.0.0.1',
-          '--port',
-          String(this.port),
-          '--log-level',
-          'info',
-        ],
-        cwd: backendDir,
-      };
-    }
-
-    // Production: use main.py as entry point
     return {
       cmd: pythonExe,
       args: [mainScript],
@@ -102,11 +117,9 @@ class BackendManager {
     };
   }
 
-  /* ---------------- Utilities ---------------- */
-
   checkInternet() {
     return new Promise((resolve) => {
-      dns.lookup('google.com', (err) => resolve(!err));
+      dns.lookup('google.com', (error) => resolve(!error));
     });
   }
 
@@ -122,108 +135,113 @@ class BackendManager {
   }
 
   async findFreePort(start = 48000, end = 48100) {
-    for (let p = start; p <= end; p++) {
-      if (await this.checkPortFree(p)) return p;
+    for (let port = start; port <= end; port += 1) {
+      if (await this.checkPortFree(port)) {
+        return port;
+      }
     }
-    throw new Error(ERROR_IDS.NO_FREE_PORT);
+
+    throw this.createError(ERROR_IDS.NO_FREE_PORT, 'No free backend port was found.');
   }
 
-  waitForBackendReady(port, timeoutMs) {
-    const start = Date.now();
+  async probeHealth(port) {
+    return new Promise((resolve) => {
+      const request = http.get(
+        {
+          host: '127.0.0.1',
+          port,
+          path: HEALTH_PATH,
+          timeout: 1500,
+        },
+        (response) => {
+          response.resume();
+          resolve(response.statusCode === 200);
+        }
+      );
 
-    return new Promise((resolve, reject) => {
-      const tryConnect = () => {
-        const socket = new net.Socket();
-
-        socket.setTimeout(1000);
-
-        socket.once('connect', () => {
-          socket.destroy();
-          this.log.info('Backend is ready!');
-          resolve(true);
-        });
-
-        socket.once('error', () => {
-          socket.destroy();
-          if (Date.now() - start > timeoutMs) {
-            this.log.error('Backend startup timeout');
-            reject(new Error(ERROR_IDS.BACKEND_TIMEOUT));
-          } else {
-            setTimeout(tryConnect, 500);
-          }
-        });
-
-        socket.once('timeout', () => {
-          socket.destroy();
-          if (Date.now() - start > timeoutMs) {
-            this.log.error('Backend startup timeout');
-            reject(new Error(ERROR_IDS.BACKEND_TIMEOUT));
-          } else {
-            setTimeout(tryConnect, 500);
-          }
-        });
-
-        socket.connect(port, '127.0.0.1');
-      };
-
-      tryConnect();
+      request.once('error', () => resolve(false));
+      request.once('timeout', () => {
+        request.destroy();
+        resolve(false);
+      });
     });
   }
 
-  /* ---------------- Public API ---------------- */
+  waitForBackendReady(port, timeoutMs) {
+    const startedAt = Date.now();
+
+    return new Promise((resolve, reject) => {
+      const probe = async () => {
+        const ready = await this.probeHealth(port);
+        if (ready) {
+          resolve(true);
+          return;
+        }
+
+        if (Date.now() - startedAt >= timeoutMs) {
+          reject(
+            this.createError(ERROR_IDS.BACKEND_TIMEOUT, 'Backend did not become healthy in time.', {
+              port,
+              stdout: [...this.stdoutBuffer],
+              stderr: [...this.stderrBuffer],
+            })
+          );
+          return;
+        }
+
+        setTimeout(probe, 500);
+      };
+
+      probe();
+    });
+  }
+
+  buildResult({ ok, error = null } = {}) {
+    return {
+      ok,
+      running: this.running,
+      port: this.port,
+      errorId: error?.id || null,
+      message: error?.message || null,
+      details: error?.details || null,
+      logsPath: this.getLogsPath(),
+      diagnostics: {
+        stdout: [...this.stdoutBuffer],
+        stderr: [...this.stderrBuffer],
+      },
+    };
+  }
 
   async start() {
-    if (this.running) {
-      this.log.info('Backend already running on port', this.port);
-      return {
-        ok: true,
-        running: true,
-        port: this.port,
-        errorId: null,
-      };
+    if (this.running && this.port && (await this.probeHealth(this.port))) {
+      this.log.info('Backend already healthy on port', this.port);
+      return this.buildResult({ ok: true });
     }
 
-    this.log.info('=== STARTING BACKEND ===');
-    this.log.info('App is packaged:', !this.isDev());
-    this.log.info('Resources path:', process.resourcesPath);
-    this.log.info('User data path:', app.getPath('userData'));
-
-    const online = await this.checkInternet();
-    this.log.info('Internet check:', online);
-
-    if (!online) {
-      this.log.warn('No internet connection detected');
-      return {
-        ok: false,
-        running: false,
-        port: null,
-        errorId: ERROR_IDS.NO_INTERNET,
-      };
+    if (this.process) {
+      await this.stop();
     }
+
+    this.lastError = null;
+    this.stdoutBuffer = [];
+    this.stderrBuffer = [];
+    this.stopping = false;
 
     try {
       this.port = await this.findFreePort();
-      this.log.info('Found free port:', this.port);
-
-      // Get paths and verify they exist
-      let paths;
-      try {
-        paths = this.getPaths();
-        this.log.info('Python paths:', JSON.stringify(paths, null, 2));
-      } catch (err) {
-        this.log.error('Failed to get paths:', err);
-        throw err;
-      }
-
       const { cmd, args, cwd } = this.getBackendCommand();
 
-      this.log.info('=== SPAWN DETAILS ===');
-      this.log.info('Command:', cmd);
-      this.log.info('Args:', JSON.stringify(args));
-      this.log.info('CWD:', cwd);
+      this.log.info('Starting backend', {
+        cmd,
+        args,
+        cwd,
+        packaged: app.isPackaged,
+        resourcesPath: process.resourcesPath,
+      });
 
       const proc = spawn(cmd, args, {
         cwd,
+        windowsHide: true,
         env: {
           ...process.env,
           ENV: this.isDev() ? 'development' : 'production',
@@ -231,112 +249,189 @@ class BackendManager {
           DATA_DIR: app.getPath('userData'),
           PYTHONPATH: cwd,
           PYTHONUNBUFFERED: '1',
+          PYTHONIOENCODING: 'utf-8',
+          PLAYWRIGHT_BROWSERS_PATH: '0',
         },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 
       this.process = proc;
-      let startupMessageReceived = false;
 
-      proc.stdout.on('data', (data) => {
-        const output = data.toString().trim();
-        this.log.info('[BACKEND STDOUT]', output);
-
-        if (output.includes('Server started on')) {
-          startupMessageReceived = true;
-          this.log.info('✓ Backend startup message received');
-        }
+      proc.stdout.on('data', (chunk) => {
+        this.rememberOutput(this.stdoutBuffer, chunk);
+        this.log.info('[BACKEND STDOUT]', chunk.toString().trim());
       });
 
-      proc.stderr.on('data', (err) => {
-        const errOutput = err.toString().trim();
-        this.log.error('[BACKEND STDERR]', errOutput);
+      proc.stderr.on('data', (chunk) => {
+        this.rememberOutput(this.stderrBuffer, chunk);
+        this.log.error('[BACKEND STDERR]', chunk.toString().trim());
       });
 
       proc.on('exit', (code, signal) => {
-        this.log.error(`Backend process exited with code ${code}, signal ${signal}`);
+        this.log.warn(`Backend process exited with code ${code}, signal ${signal}`);
+
+        if (!this.stopping) {
+          this.lastError = this.createError(
+            ERROR_IDS.BACKEND_CRASHED,
+            'Backend process exited unexpectedly.',
+            {
+              code,
+              signal,
+              stdout: [...this.stdoutBuffer],
+              stderr: [...this.stderrBuffer],
+            }
+          );
+        }
+
         this.running = false;
         this.process = null;
+        this.port = null;
       });
 
-      proc.on('error', (err) => {
-        this.log.error('Backend spawn error:', err);
-        this.running = false;
-        this.process = null;
+      proc.on('error', (error) => {
+        this.log.error('Backend spawn error', error);
+        this.lastError = this.createError(
+          ERROR_IDS.BACKEND_START_FAILED,
+          `Failed to spawn backend: ${error.message}`,
+          { cause: error.message }
+        );
       });
 
-      // Wait for backend to be ready
-      this.log.info('Waiting for backend to be ready on port', this.port);
-      await this.waitForBackendReady(this.port, STARTUP_TIMEOUT_MS);
+      await new Promise((resolve, reject) => {
+        let settled = false;
+
+        const finish = (callback) => (value) => {
+          if (settled) {
+            return;
+          }
+
+          settled = true;
+          callback(value);
+        };
+
+        const resolveOnce = finish(resolve);
+        const rejectOnce = finish(reject);
+
+        const onExit = (code, signal) => {
+          rejectOnce(
+            this.createError(
+              ERROR_IDS.BACKEND_START_FAILED,
+              'Backend exited before it became ready.',
+              {
+                code,
+                signal,
+                stdout: [...this.stdoutBuffer],
+                stderr: [...this.stderrBuffer],
+              }
+            )
+          );
+        };
+
+        const onError = (error) => {
+          rejectOnce(
+            this.createError(
+              ERROR_IDS.BACKEND_START_FAILED,
+              `Backend failed to start: ${error.message}`,
+              { cause: error.message }
+            )
+          );
+        };
+
+        proc.once('exit', onExit);
+        proc.once('error', onError);
+
+        this.waitForBackendReady(this.port, STARTUP_TIMEOUT_MS)
+          .then(() => {
+            proc.off('exit', onExit);
+            proc.off('error', onError);
+            resolveOnce(true);
+          })
+          .catch((error) => {
+            proc.off('exit', onExit);
+            proc.off('error', onError);
+            rejectOnce(error);
+          });
+      });
 
       this.running = true;
       this.store.set('backend.port', this.port);
+      this.store.set('backend.lastStartedAt', new Date().toISOString());
+      this.log.info('Backend started successfully on port', this.port);
 
-      this.log.info('✓ Backend started successfully on port', this.port);
+      return this.buildResult({ ok: true });
+    } catch (error) {
+      const normalizedError =
+        error instanceof Error ? error : this.createError(ERROR_IDS.BACKEND_START_FAILED, String(error));
 
-      return {
-        ok: true,
-        running: true,
-        port: this.port,
-        errorId: null,
-      };
-    } catch (err) {
-      this.log.error('=== BACKEND START FAILED ===');
-      this.log.error('Error:', err.message);
-      this.log.error('Stack:', err.stack);
-
+      this.lastError = normalizedError;
       this.running = false;
-      this.port = null;
 
       if (this.process) {
-        this.log.info('Killing failed backend process');
-        this.process.kill();
-        this.process = null;
+        await this.stop();
       }
 
-      return {
-        ok: false,
-        running: false,
-        port: null,
-        errorId:
-          err.message === ERROR_IDS.NO_FREE_PORT
-            ? ERROR_IDS.NO_FREE_PORT
-            : err.message === ERROR_IDS.BACKEND_TIMEOUT
-              ? ERROR_IDS.BACKEND_TIMEOUT
-              : ERROR_IDS.BACKEND_START_FAILED,
-      };
+      return this.buildResult({ ok: false, error: normalizedError });
     }
   }
 
   async stop() {
-    if (this.process) {
-      this.log.info('Stopping backend...');
-      this.process.kill('SIGTERM');
-
-      // Force kill after 5 seconds if still running
-      setTimeout(() => {
-        if (this.process) {
-          this.log.warn('Force killing backend process');
-          this.process.kill('SIGKILL');
-        }
-      }, 5000);
-
-      this.process = null;
+    if (!this.process) {
+      this.running = false;
+      this.port = null;
+      return;
     }
 
+    const proc = this.process;
+    this.process = null;
     this.running = false;
+    this.stopping = true;
+
+    await new Promise((resolve) => {
+      let settled = false;
+      const done = () => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        resolve(true);
+      };
+
+      proc.once('exit', () => {
+        done();
+      });
+
+      try {
+        proc.kill('SIGTERM');
+      } catch (error) {
+        this.log.warn('Failed to send SIGTERM to backend', error);
+        done();
+      }
+
+      setTimeout(() => {
+        if (settled) {
+          return;
+        }
+
+        try {
+          proc.kill('SIGKILL');
+        } catch (error) {
+          this.log.warn('Failed to force kill backend', error);
+        }
+
+        done();
+      }, STOP_TIMEOUT_MS);
+    });
+
     this.port = null;
+    this.stopping = false;
     this.log.info('Backend stopped');
   }
 
   getStatus() {
-    return {
-      ok: this.running,
-      running: this.running,
-      port: this.port,
-      errorId: this.running ? null : ERROR_IDS.BACKEND_CRASHED,
-    };
+    return this.buildResult({ ok: this.running, error: this.lastError });
   }
 }
 
 module.exports = BackendManager;
+module.exports.ERROR_IDS = ERROR_IDS;

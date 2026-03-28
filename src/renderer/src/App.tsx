@@ -1,16 +1,16 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import { useAppContext } from '@/context/app/AppContext';
 import { MainLayout } from '@/layout/MainLayout';
 import { SplashScreen } from '@/screens/SplashScreen';
 import { InitErrorScreen } from '@/screens/InitErrorScreen';
+import SettingsScreen from '@/screens/settings/SettingsScreen';
 
 import Dashboard from '@/screens/dashboard/Dashboard';
 import HistoryScreen from './screens/jobHistory/HistoryScreen';
 
 const PresetsScreen = () => <div className="p-6">Presets Screen</div>;
-const SettingsScreen = () => <div className="p-6">Settings Screen</div>;
 const ResultsScreen = () => <div className="p-6">Results Screen</div>;
 
 export type ModalId = 'search' | 'about' | 'new-scrape';

@@ -1,5 +1,20 @@
-// context/app/init/steps/startBackend.ts
-import type { InitStep } from '../types';
+﻿import type { InitStep } from '../types';
+
+function stringifyDetails(details: unknown) {
+  if (!details) {
+    return null;
+  }
+
+  if (typeof details === 'string') {
+    return details;
+  }
+
+  try {
+    return JSON.stringify(details, null, 2);
+  } catch {
+    return String(details);
+  }
+}
 
 export const startBackendStep: InitStep = {
   id: 'starting_backend',
@@ -8,14 +23,17 @@ export const startBackendStep: InitStep = {
 
   async run(setState) {
     const res = await window.app.start_backend();
-    if (!res.ok) {
+
+    if (!res.ok || !res.running || !res.port) {
       throw {
-        id: res.errorId,
-        message: 'Failed to start backend service.',
+        id: res.errorId ?? 'BACKEND_START_FAILED',
+        message: res.message ?? 'Failed to start backend service.',
+        details: stringifyDetails(res.details),
+        logsPath: res.logsPath,
+        diagnostics: res.diagnostics ?? null,
       };
     }
 
-    // Save backend info to state
     const baseUrl = `http://127.0.0.1:${res.port}`;
     setState((prev) => ({
       ...prev,

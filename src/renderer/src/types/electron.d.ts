@@ -1,9 +1,10 @@
-export {};
+﻿export {};
 
 declare global {
   interface Window {
-    electron: {
-      openExternal: (url: string) => void;
+    electron?: {
+      getAppVersion?: () => Promise<string>;
+      openExternal?: (url: string) => void;
     };
   }
 }
