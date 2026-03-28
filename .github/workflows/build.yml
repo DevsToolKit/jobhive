@@ -1,0 +1,123 @@
+name: Build and Release
+
+on:
+  pull_request:
+    branches:
+      - develop
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ci:
+    name: Run CI
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            src/renderer/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: src/backend/requirements.txt
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install renderer dependencies
+        run: npm ci --prefix src/renderer
+
+      - name: Install backend test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r src/backend/requirements.txt pytest
+
+      - name: Run tests
+        run: npm test
+
+      - name: Verify renderer build
+        run: npm run build:renderer
+
+  release:
+    name: Build and publish develop release
+    needs: ci
+    if: github.ref == 'refs/heads/develop' && github.event_name != 'pull_request'
+    runs-on: windows-latest
+    env:
+      JOBHIVE_RELEASE_TYPE: prerelease
+      JOBHIVE_UPDATE_CHANNEL: beta
+      JOBHIVE_UPDATE_GITHUB_OWNER: ${{ github.repository_owner }}
+      JOBHIVE_UPDATE_GITHUB_REPO: ${{ github.event.repository.name }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            src/renderer/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install renderer dependencies
+        run: npm ci --prefix src/renderer
+
+      - name: Stamp develop prerelease version
+        id: version
+        shell: pwsh
+        run: |
+          $baseVersion = node -p "require('./package.json').version.split('-')[0]"
+          $releaseVersion = "$baseVersion-beta.${{ github.run_number }}"
+
+          npm version --no-git-tag-version $releaseVersion | Out-Null
+
+          "base=$baseVersion" >> $env:GITHUB_OUTPUT
+          "release=$releaseVersion" >> $env:GITHUB_OUTPUT
+
+      - name: Build Windows beta artifacts
+        run: npm run build:win:beta
+
+      - name: Upload build artifacts to workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: jobhive-develop-${{ steps.version.outputs.release }}
+          if-no-files-found: error
+          path: |
+            dist/*.exe
+            dist/*.blockmap
+            dist/beta.yml
+
+      - name: Create GitHub prerelease
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          artifactErrorsFailBuild: true
+          artifacts: dist/*.exe,dist/*.blockmap,dist/beta.yml
+          commit: ${{ github.sha }}
+          generateReleaseNotes: true
+          name: JobHive develop ${{ steps.version.outputs.release }}
+          prerelease: true
+          replacesArtifacts: true
+          tag: v${{ steps.version.outputs.release }}
