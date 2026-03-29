@@ -3,9 +3,11 @@ name: Build and Release
 on:
   pull_request:
     branches:
+      - main
       - develop
   push:
     branches:
+      - main
       - develop
   workflow_dispatch:
 
@@ -55,14 +57,12 @@ jobs:
         run: npm run build:renderer
 
   release:
-    name: Build and publish develop release
+    name: Build and publish release
     needs: ci
-    if: github.ref == 'refs/heads/develop' && github.event_name != 'pull_request'
+    if: (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main') && github.event_name != 'pull_request'
     runs-on: windows-latest
     env:
       GH_TOKEN: ${{ secrets.GH_TOKEN }}
-      JOBHIVE_RELEASE_TYPE: prerelease
-      JOBHIVE_UPDATE_CHANNEL: beta
       JOBHIVE_UPDATE_GITHUB_OWNER: ${{ github.repository_owner }}
       JOBHIVE_UPDATE_GITHUB_REPO: ${{ github.event.repository.name }}
 
@@ -85,40 +85,63 @@ jobs:
       - name: Install renderer dependencies
         run: npm ci --prefix src/renderer
 
-      - name: Stamp develop prerelease version
-        id: version
+      - name: Prepare release settings
+        id: release
         shell: pwsh
         run: |
           $baseVersion = node -p "require('./package.json').version.split('-')[0]"
-          $releaseVersion = "$baseVersion-beta.${{ github.run_number }}"
 
-          npm version --no-git-tag-version $releaseVersion | Out-Null
+          if ('${{ github.ref }}' -eq 'refs/heads/develop') {
+            $releaseVersion = "$baseVersion-beta.${{ github.run_number }}"
+            $releaseType = 'prerelease'
+            $updateChannel = 'beta'
+            $buildScript = 'build:win:beta'
+            $releaseName = "JobHive develop $releaseVersion"
+            $isPrerelease = 'true'
+
+            npm version --no-git-tag-version $releaseVersion | Out-Null
+          } else {
+            $releaseVersion = $baseVersion
+            $releaseType = 'release'
+            $updateChannel = 'latest'
+            $buildScript = 'build:win:stable'
+            $releaseName = "JobHive $releaseVersion"
+            $isPrerelease = 'false'
+          }
 
           "base=$baseVersion" >> $env:GITHUB_OUTPUT
           "release=$releaseVersion" >> $env:GITHUB_OUTPUT
+          "release_type=$releaseType" >> $env:GITHUB_OUTPUT
+          "update_channel=$updateChannel" >> $env:GITHUB_OUTPUT
+          "build_script=$buildScript" >> $env:GITHUB_OUTPUT
+          "release_name=$releaseName" >> $env:GITHUB_OUTPUT
+          "is_prerelease=$isPrerelease" >> $env:GITHUB_OUTPUT
 
-      - name: Build Windows beta artifacts
-        run: npm run build:win:beta
+      - name: Build Windows release artifacts
+        env:
+          JOBHIVE_RELEASE_TYPE: ${{ steps.release.outputs.release_type }}
+          JOBHIVE_UPDATE_CHANNEL: ${{ steps.release.outputs.update_channel }}
+        run: npm run ${{ steps.release.outputs.build_script }}
 
       - name: Upload build artifacts to workflow
         uses: actions/upload-artifact@v4
         with:
-          name: jobhive-develop-${{ steps.version.outputs.release }}
+          name: jobhive-${{ steps.release.outputs.update_channel }}-${{ steps.release.outputs.release }}
           if-no-files-found: error
           path: |
             dist/*.exe
             dist/*.blockmap
-            dist/${{ env.JOBHIVE_UPDATE_CHANNEL }}.yml
+            dist/${{ steps.release.outputs.update_channel }}.yml
 
-      - name: Create GitHub prerelease
+      - name: Create GitHub release
         uses: ncipollo/release-action@v1
         with:
           allowUpdates: true
           artifactErrorsFailBuild: true
-          artifacts: dist/*.exe,dist/*.blockmap,dist/${{ env.JOBHIVE_UPDATE_CHANNEL }}.yml
+          artifacts: dist/*.exe,dist/*.blockmap,dist/${{ steps.release.outputs.update_channel }}.yml
           commit: ${{ github.sha }}
           generateReleaseNotes: true
-          name: JobHive develop ${{ steps.version.outputs.release }}
-          prerelease: true
+          name: ${{ steps.release.outputs.release_name }}
+          prerelease: ${{ steps.release.outputs.is_prerelease }}
           replacesArtifacts: true
-          tag: v${{ steps.version.outputs.release }}
+          tag: v${{ steps.release.outputs.release }}
