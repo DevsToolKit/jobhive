@@ -100,6 +100,10 @@ module.exports = {
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
     perMachine: false,
+    artifactName: '${productName}-Setup-${version}.${ext}',
+  },
+  portable: {
+    artifactName: '${productName}-Portable-${version}.${ext}',
   },
   publish: getPublishConfig(),
   detectUpdateChannel: false,
