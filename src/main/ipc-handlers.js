@@ -1,6 +1,4 @@
-﻿const { app, ipcMain, shell } = require('electron');
-const os = require('os');
-const { exec } = require('child_process');
+const { app, ipcMain, shell } = require('electron');
 
 function createNoopUpdater() {
   const preferences = {
@@ -15,7 +13,7 @@ function createNoopUpdater() {
       ok: true,
       enabled: false,
       status: 'idle',
-      message: 'Auto-updates are not available yet.',
+      message: 'Auto-updates are not available.',
       currentVersion: app.getVersion(),
       channel: 'latest',
       updateAvailable: false,
@@ -99,32 +97,14 @@ function setupIpcHandlers({ backendManager, appUpdater }) {
   });
 
   ipcMain.handle('open-external-url', async (_, rawUrl) => {
-    const url = normalizeUrl(rawUrl);
-
     try {
+      const url = normalizeUrl(rawUrl);
       await shell.openExternal(url, { activate: true });
       return { ok: true };
     } catch (error) {
-      console.error('shell.openExternal failed, trying fallback:', error);
+      console.error('Failed to open external URL:', error);
+      return { ok: false, error: error.message };
     }
-
-    const platform = os.platform();
-
-    if (platform === 'win32') {
-      exec(`start "" "${url}"`, { shell: 'cmd.exe' }, (error) => {
-        if (error) console.error('Windows fallback failed:', error);
-      });
-    } else if (platform === 'darwin') {
-      exec(`open "${url}"`, (error) => {
-        if (error) console.error('macOS fallback failed:', error);
-      });
-    } else {
-      exec(`xdg-open "${url}"`, (error) => {
-        if (error) console.error('Linux fallback failed:', error);
-      });
-    }
-
-    return { ok: true };
   });
 }
 

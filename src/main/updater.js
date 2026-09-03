@@ -41,7 +41,8 @@ class AppUpdater {
     this.store = store;
     this.getWindow = getWindow;
     this.pollTimer = null;
-    this.channel = normalizeChannel(process.env.JOBHIVE_UPDATE_CHANNEL) || getVersionChannel(app.getVersion());
+    this.channel =
+      normalizeChannel(process.env.JOBHIVE_UPDATE_CHANNEL) || getVersionChannel(app.getVersion());
     this.state = { ...DEFAULT_STATUS, channel: this.channel };
   }
 
@@ -62,9 +63,12 @@ class AppUpdater {
       return;
     }
 
-    this.pollTimer = setInterval(() => {
-      this.checkForUpdates();
-    }, 6 * 60 * 60 * 1000);
+    this.pollTimer = setInterval(
+      () => {
+        this.checkForUpdates();
+      },
+      6 * 60 * 60 * 1000
+    );
   }
 
   setPreferences(nextPreferences = {}) {

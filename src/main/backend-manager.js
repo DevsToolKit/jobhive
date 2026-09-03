@@ -1,6 +1,5 @@
-const { spawn } = require('child_process');
+const { spawn, execFile } = require('child_process');
 const dns = require('dns');
-const { execFile } = require('child_process');
 const fs = require('fs');
 const http = require('http');
 const net = require('net');
@@ -41,12 +40,28 @@ class BackendManager {
     return new Promise((resolve) => {
       execFile('taskkill', ['/pid', String(pid), '/t', '/f'], { windowsHide: true }, (error) => {
         if (error) {
-          this.log.warn('taskkill failed for backend process tree', { pid, message: error.message });
+          this.log.warn('taskkill failed for backend process tree', {
+            pid,
+            message: error.message,
+          });
         }
-
         resolve(true);
       });
     });
+  }
+
+  killUnixProcessGroup(pid, signal = 'SIGTERM') {
+    try {
+      process.kill(-pid, signal);
+      return true;
+    } catch {
+      try {
+        process.kill(pid, signal);
+        return true;
+      } catch {
+        return false;
+      }
+    }
   }
 
   isDev() {
@@ -82,24 +97,43 @@ class BackendManager {
   }
 
   resolvePythonExecutable() {
-    if (this.isDev()) {
-      if (process.env.JOBHIVE_PYTHON_PATH) {
+    // 1. Explicit environment override
+    if (process.env.JOBHIVE_PYTHON_PATH) {
+      if (fs.existsSync(process.env.JOBHIVE_PYTHON_PATH)) {
         return process.env.JOBHIVE_PYTHON_PATH;
       }
-      const venvPython =
-        process.platform === 'win32'
-          ? path.join(app.getAppPath(), '.venv', 'Scripts', 'python.exe')
-          : path.join(app.getAppPath(), '.venv', 'bin', 'python');
-      if (fs.existsSync(venvPython)) {
-        return venvPython;
-      }
-      return process.platform === 'win32' ? 'python' : 'python3';
+      this.log.warn(
+        'Configured JOBHIVE_PYTHON_PATH does not exist:',
+        process.env.JOBHIVE_PYTHON_PATH
+      );
     }
 
-    const runtimeRoot = path.join(process.resourcesPath, 'python-runtime', 'python');
-    return process.platform === 'win32'
-      ? path.join(runtimeRoot, 'python.exe')
-      : path.join(runtimeRoot, 'bin', 'python3');
+    // 2. Packaged bundled runtime (Windows & macOS if bundled)
+    if (!this.isDev()) {
+      const runtimeRoot = path.join(process.resourcesPath, 'python-runtime', 'python');
+      const bundledExe =
+        process.platform === 'win32'
+          ? path.join(runtimeRoot, 'python.exe')
+          : path.join(runtimeRoot, 'bin', 'python3');
+
+      if (fs.existsSync(bundledExe)) {
+        return bundledExe;
+      }
+    }
+
+    // 3. Local virtualenv
+    const appRoot = app.getAppPath();
+    const venvPython =
+      process.platform === 'win32'
+        ? path.join(appRoot, '.venv', 'Scripts', 'python.exe')
+        : path.join(appRoot, '.venv', 'bin', 'python');
+
+    if (fs.existsSync(venvPython)) {
+      return venvPython;
+    }
+
+    // 4. System Python
+    return process.platform === 'win32' ? 'python' : 'python3';
   }
 
   getPaths() {
@@ -116,15 +150,13 @@ class BackendManager {
     }
 
     if (!fs.existsSync(mainScript)) {
-      throw this.createError(ERROR_IDS.BACKEND_FILES_MISSING, 'Backend entrypoint main.py is missing.', {
-        mainScript,
-      });
-    }
-
-    if (!this.isDev() && !fs.existsSync(pythonExe)) {
-      throw this.createError(ERROR_IDS.PYTHON_RUNTIME_MISSING, 'Bundled Python runtime is missing.', {
-        pythonExe,
-      });
+      throw this.createError(
+        ERROR_IDS.BACKEND_FILES_MISSING,
+        'Backend entrypoint main.py is missing.',
+        {
+          mainScript,
+        }
+      );
     }
 
     return { pythonExe, backendDir, mainScript };
@@ -262,9 +294,12 @@ class BackendManager {
         resourcesPath: process.resourcesPath,
       });
 
+      const isWin = process.platform === 'win32';
+
       const proc = spawn(cmd, args, {
         cwd,
         windowsHide: true,
+        detached: !isWin, // Form process group on macOS/Linux for clean termination
         env: {
           ...process.env,
           ENV: this.isDev() ? 'development' : 'production',
@@ -323,10 +358,7 @@ class BackendManager {
         let settled = false;
 
         const finish = (callback) => (value) => {
-          if (settled) {
-            return;
-          }
-
+          if (settled) return;
           settled = true;
           callback(value);
         };
@@ -383,7 +415,9 @@ class BackendManager {
       return this.buildResult({ ok: true });
     } catch (error) {
       const normalizedError =
-        error instanceof Error ? error : this.createError(ERROR_IDS.BACKEND_START_FAILED, String(error));
+        error instanceof Error
+          ? error
+          : this.createError(ERROR_IDS.BACKEND_START_FAILED, String(error));
 
       this.lastError = normalizedError;
       this.running = false;
@@ -405,6 +439,8 @@ class BackendManager {
 
     const proc = this.process;
     const pid = proc.pid;
+    const isWin = process.platform === 'win32';
+
     this.process = null;
     this.running = false;
     this.stopping = true;
@@ -412,10 +448,7 @@ class BackendManager {
     await new Promise((resolve) => {
       let settled = false;
       const done = () => {
-        if (settled) {
-          return;
-        }
-
+        if (settled) return;
         settled = true;
         resolve(true);
       };
@@ -424,28 +457,34 @@ class BackendManager {
       proc.once('close', done);
 
       try {
-        proc.kill('SIGTERM');
+        if (isWin) {
+          proc.kill('SIGTERM');
+        } else if (pid) {
+          this.killUnixProcessGroup(pid, 'SIGTERM');
+        }
       } catch (error) {
         this.log.warn('Failed to send SIGTERM to backend', error);
         done();
       }
 
       setTimeout(() => {
-        if (settled) {
-          return;
-        }
+        if (settled) return;
 
-        if (process.platform === 'win32' && pid) {
+        if (isWin && pid) {
           this.taskKillWindowsProcessTree(pid)
             .then(() => done())
             .catch(() => done());
           return;
         }
 
-        try {
-          proc.kill('SIGKILL');
-        } catch (error) {
-          this.log.warn('Failed to force kill backend', error);
+        if (!isWin && pid) {
+          this.killUnixProcessGroup(pid, 'SIGKILL');
+        } else {
+          try {
+            proc.kill('SIGKILL');
+          } catch (error) {
+            this.log.warn('Failed to force kill backend', error);
+          }
         }
 
         done();

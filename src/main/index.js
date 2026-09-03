@@ -1,5 +1,6 @@
-﻿const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, dialog, Menu, shell } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const log = require('electron-log');
 const Store = require('electron-store').default;
 
@@ -41,20 +42,133 @@ function reportFatalError(title, error, details = {}) {
   );
 }
 
+function resolveAppIcon() {
+  const possiblePaths = [
+    path.join(__dirname, '../../resources/icon.ico'),
+    path.join(process.resourcesPath, 'icon.ico'),
+    path.join(process.resourcesPath, 'resources/icon.ico'),
+  ];
+
+  for (const iconPath of possiblePaths) {
+    if (fs.existsSync(iconPath)) {
+      return iconPath;
+    }
+  }
+
+  return undefined;
+}
+
+function createApplicationMenu() {
+  const isMac = process.platform === 'darwin';
+
+  const template = [
+    ...(isMac
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: 'about' },
+              { type: 'separator' },
+              { role: 'services' },
+              { type: 'separator' },
+              { role: 'hide' },
+              { role: 'hideOthers' },
+              { role: 'unhide' },
+              { type: 'separator' },
+              { role: 'quit' },
+            ],
+          },
+        ]
+      : []),
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+      ],
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        ...(isDev ? [{ role: 'toggleDevTools' }] : []),
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ],
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        ...(isMac
+          ? [{ type: 'separator' }, { role: 'front' }, { type: 'separator' }, { role: 'window' }]
+          : [{ role: 'close' }]),
+      ],
+    },
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
+
+function saveWindowState() {
+  if (!mainWindow) return;
+
+  try {
+    const isMaximized = mainWindow.isMaximized();
+    store.set('window.isMaximized', isMaximized);
+
+    if (!isMaximized) {
+      const bounds = mainWindow.getBounds();
+      store.set('window.bounds', bounds);
+    }
+  } catch (err) {
+    log.warn('Failed to save window state:', err);
+  }
+}
+
 function createWindow() {
+  const savedBounds = store.get('window.bounds', {});
+  const wasMaximized = store.get('window.isMaximized', false);
+
   mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
+    width: savedBounds.width || 1400,
+    height: savedBounds.height || 900,
+    x: savedBounds.x,
+    y: savedBounds.y,
     minWidth: 1100,
     minHeight: 760,
     show: false,
+    icon: resolveAppIcon(),
     backgroundColor: '#0f172a',
+    autoHideMenuBar: process.platform !== 'darwin',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       sandbox: true,
+      nodeIntegration: false,
+      spellcheck: false,
     },
   });
+
+  if (process.platform !== 'darwin') {
+    mainWindow.setMenuBarVisibility(false);
+  }
+
+  if (wasMaximized) {
+    mainWindow.maximize();
+  }
 
   mainWindow.on('unresponsive', () => {
     log.warn('Main window became unresponsive');
@@ -72,6 +186,24 @@ function createWindow() {
     );
   });
 
+  // Navigation & Security Hardening
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http:') || url.startsWith('https:') || url.startsWith('mailto:')) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+
+  mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
+    const isDevUrl = isDev && navigationUrl.startsWith('http://localhost:5173');
+    const isFileUrl = navigationUrl.startsWith('file://');
+
+    if (!isDevUrl && !isFileUrl) {
+      event.preventDefault();
+      shell.openExternal(navigationUrl);
+    }
+  });
+
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
@@ -83,6 +215,10 @@ function createWindow() {
     mainWindow.show();
   });
 
+  mainWindow.on('close', () => {
+    saveWindowState();
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -90,6 +226,8 @@ function createWindow() {
 
 async function initialize() {
   try {
+    createApplicationMenu();
+
     backendManager = new BackendManager({ store, log });
     appUpdater = new AppUpdater({ log, store, getWindow: () => mainWindow });
 
@@ -110,6 +248,8 @@ async function shutdownApp() {
 
   shutdownPromise = (async () => {
     isShuttingDown = true;
+
+    saveWindowState();
 
     if (appUpdater) {
       appUpdater.dispose();
