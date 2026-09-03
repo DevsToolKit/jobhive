@@ -1,4 +1,4 @@
-﻿const { spawn } = require('child_process');
+const { spawn } = require('child_process');
 const dns = require('dns');
 const { execFile } = require('child_process');
 const fs = require('fs');
@@ -83,7 +83,17 @@ class BackendManager {
 
   resolvePythonExecutable() {
     if (this.isDev()) {
-      return process.env.JOBHIVE_PYTHON_PATH || (process.platform === 'win32' ? 'python' : 'python3');
+      if (process.env.JOBHIVE_PYTHON_PATH) {
+        return process.env.JOBHIVE_PYTHON_PATH;
+      }
+      const venvPython =
+        process.platform === 'win32'
+          ? path.join(app.getAppPath(), '.venv', 'Scripts', 'python.exe')
+          : path.join(app.getAppPath(), '.venv', 'bin', 'python');
+      if (fs.existsSync(venvPython)) {
+        return venvPython;
+      }
+      return process.platform === 'win32' ? 'python' : 'python3';
     }
 
     const runtimeRoot = path.join(process.resourcesPath, 'python-runtime', 'python');
