@@ -1,16 +1,16 @@
 import json
 import time
-from typing import Optional, Callable
-from jobspy import scrape_jobs
+from typing import Callable, Optional
 import pandas as pd
+from jobspy import scrape_jobs
 
 from database.connection import get_db
 from models.scrape_config import ScrapeConfig
 from models.session import SessionStatus
-
 from utils.clean_description import clean_description
-from utils.job_tags import extract_tags
 from utils.compensation_extractor import extract_compensation_from_text
+from utils.job_tags import extract_tags
+from utils.logger import logger
 from utils.number_utils import safe_float
 
 
@@ -35,7 +35,7 @@ class ScrapingService:
                 config.search_term,
                 config.location,
                 SessionStatus.RUNNING.value,
-                json.dumps(config.dict())
+                json.dumps(config.model_dump())
             ))
             conn.commit()
 
@@ -59,37 +59,42 @@ class ScrapingService:
                 })
 
             self._scrape_and_save(session_id, config, progress_callback, start_time)
-            self._update_session_status(session_id, SessionStatus.COMPLETED)
 
-            # Send final completion progress
-            if progress_callback:
-                elapsed = time.time() - start_time
-                progress_callback({
-                    "session_id": session_id,
-                    "status": "completed",
-                    "elapsed_time": elapsed,
-                    "current_operation": "Scraping completed successfully",
-                })
+            if not self.is_cancelled(session_id):
+                self._update_session_status(session_id, SessionStatus.COMPLETED)
+
+                if progress_callback:
+                    elapsed = time.time() - start_time
+                    progress_callback({
+                        "session_id": session_id,
+                        "status": "completed",
+                        "elapsed_time": elapsed,
+                        "current_operation": "Scraping completed successfully",
+                    })
 
         except Exception as e:
-            self._update_session_status(
-                session_id,
-                SessionStatus.FAILED,
-                error_message=str(e)
-            )
-            
-            if progress_callback:
-                progress_callback({
-                    "session_id": session_id,
-                    "status": "error",
-                    "error_message": str(e),
-                })
+            if not self.is_cancelled(session_id):
+                self._update_session_status(
+                    session_id,
+                    SessionStatus.FAILED,
+                    error_message=str(e)
+                )
+                if progress_callback:
+                    progress_callback({
+                        "session_id": session_id,
+                        "status": "error",
+                        "error_message": str(e),
+                    })
             raise
 
         finally:
             self.active_sessions.pop(session_id, None)
 
         return session_id
+
+    def is_cancelled(self, session_id: str) -> bool:
+        session = self.active_sessions.get(session_id)
+        return bool(session and session.get("status") == SessionStatus.CANCELLED)
 
     def _scrape_and_save(
         self,
@@ -110,7 +115,7 @@ class ScrapingService:
         if "linkedin" in site_names:
             scrape_params.update({
                 "linkedin_fetch_description": True,
-                "verbose": 1,
+                "verbose": 0,
             })
 
         if config.location:
@@ -125,7 +130,7 @@ class ScrapingService:
             scrape_params["hours_old"] = config.hours_old
         if config.offset:
             scrape_params["offset"] = config.offset
-        
+
         if progress_callback:
             elapsed = time.time() - start_time
             progress_callback({
@@ -136,6 +141,9 @@ class ScrapingService:
             })
 
         jobs_df = scrape_jobs(**scrape_params)
+
+        if self.is_cancelled(session_id):
+            return
 
         if jobs_df is None or jobs_df.empty:
             if progress_callback:
@@ -150,7 +158,7 @@ class ScrapingService:
             return
 
         total_jobs = len(jobs_df)
-        
+
         if progress_callback:
             elapsed = time.time() - start_time
             progress_callback({
@@ -180,7 +188,6 @@ class ScrapingService:
         start_time: float,
         total_jobs: int
     ) -> int:
-
         # Normalization
         jobs_df = jobs_df.replace({pd.NaT: None})
         jobs_df = jobs_df.where(pd.notna(jobs_df), None)
@@ -204,9 +211,12 @@ class ScrapingService:
             cursor = conn.cursor()
 
             for idx, row in jobs_df.iterrows():
+                if self.is_cancelled(session_id):
+                    logger.info(f"Stopping job save loop for cancelled session {session_id}")
+                    break
+
                 job_start = time.time()
                 try:
-                    # Location parsing
                     city = state = country = None
                     if row["location"]:
                         parts = [p.strip() for p in row["location"].split(",")]
@@ -214,11 +224,9 @@ class ScrapingService:
                         state = parts[1] if len(parts) > 1 else None
                         country = parts[2] if len(parts) > 2 else None
 
-                    # Description cleaning
                     raw_desc = row["description"] or ""
                     cleaned_desc = clean_description(raw_desc)
 
-                    # Salary extraction
                     min_amount = safe_float(row["min_amount"])
                     max_amount = safe_float(row["max_amount"])
                     currency = row["currency"]
@@ -229,7 +237,6 @@ class ScrapingService:
                         if extracted:
                             min_amount, max_amount, currency, interval = extracted
 
-                    # Date parsing
                     date_posted = None
                     if row["date_posted"]:
                         try:
@@ -237,9 +244,7 @@ class ScrapingService:
                         except Exception:
                             pass
 
-                    # Remote flag
                     is_remote = bool(row["is_remote"]) if row["is_remote"] is not None else False
-
                     tags = json.dumps(extract_tags(row))
 
                     cursor.execute("""
@@ -260,8 +265,7 @@ class ScrapingService:
 
                     jobs_saved += 1
                     job_duration = time.time() - job_start
-                    
-                    # Track recent jobs
+
                     recent_jobs.append({
                         "id": str(idx),
                         "url": row["job_url"],
@@ -271,14 +275,13 @@ class ScrapingService:
                     if len(recent_jobs) > 5:
                         recent_jobs.pop(0)
 
-                    # Send progress update every job or every 5 jobs
                     if progress_callback and (jobs_saved % 5 == 0 or jobs_saved == total_jobs):
                         elapsed = time.time() - start_time
                         completed = jobs_saved + failed_jobs
                         progress_percent = (completed / total_jobs * 100) if total_jobs > 0 else 0
                         avg_time = elapsed / completed if completed > 0 else 0
                         remaining = (total_jobs - completed) * avg_time if avg_time > 0 else 0
-                        
+
                         progress_callback({
                             "session_id": session_id,
                             "status": "processing",
@@ -299,9 +302,8 @@ class ScrapingService:
 
                 except Exception as e:
                     failed_jobs += 1
-                    print(f"JOB SAVE FAILED: {row.get('site')} - {row.get('title')}")
-                    print(e)
-                    
+                    logger.warning(f"Failed to save job {row.get('site')} - {row.get('title')}: {e}")
+
                     job_duration = time.time() - job_start
                     recent_jobs.append({
                         "id": str(idx),
@@ -315,8 +317,7 @@ class ScrapingService:
 
             conn.commit()
 
-        # Final progress update
-        if progress_callback:
+        if progress_callback and not self.is_cancelled(session_id):
             elapsed = time.time() - start_time
             progress_callback({
                 "session_id": session_id,
@@ -359,11 +360,11 @@ class ScrapingService:
     def cancel_scrape(self, session_id: str) -> bool:
         if session_id in self.active_sessions:
             self._update_session_status(session_id, SessionStatus.CANCELLED)
-            self.active_sessions.pop(session_id, None)
+            self.active_sessions[session_id]["status"] = SessionStatus.CANCELLED
             return True
         return False
 
-    def get_session_status(self, session_id: str) -> dict:
+    def get_session_status(self, session_id: str) -> Optional[dict]:
         if session_id in self.active_sessions:
             return self.active_sessions[session_id]
 

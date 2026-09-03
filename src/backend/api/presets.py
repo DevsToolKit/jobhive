@@ -1,15 +1,14 @@
 from typing import List
-
 from fastapi import APIRouter, HTTPException
 
 from models.preset import Preset, PresetCreate, PresetSummary
 from services.preset_service import PresetService
 
 router = APIRouter(prefix="/api/presets", tags=["presets"])
-
 preset_service = PresetService()
 
 
+@router.get("", response_model=List[PresetSummary])
 @router.get("/", response_model=List[PresetSummary])
 async def get_presets():
     try:
@@ -31,6 +30,7 @@ async def get_preset(preset_id: str):
     return preset
 
 
+@router.post("", response_model=Preset, status_code=201)
 @router.post("/", response_model=Preset, status_code=201)
 async def create_preset(payload: PresetCreate):
     try:

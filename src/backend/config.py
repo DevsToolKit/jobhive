@@ -1,11 +1,15 @@
-# src/backend/config.py
-
 from pathlib import Path
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from utils.paths import get_data_dir, get_db_path
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=False,
+        extra="ignore"
+    )
+
     # -----------------------------
     # Environment
     # -----------------------------
@@ -42,10 +46,6 @@ class Settings(BaseSettings):
     RATE_LIMIT_ENABLED: bool = False
     RATE_LIMIT_REQUESTS: int = 100
     RATE_LIMIT_PERIOD: int = 60
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
 
 
 settings = Settings()

@@ -1,7 +1,8 @@
-from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 from enum import Enum
+from pydantic import BaseModel, ConfigDict
+
 
 class SessionStatus(str, Enum):
     PENDING = "pending"
@@ -10,25 +11,28 @@ class SessionStatus(str, Enum):
     FAILED = "failed"
     CANCELLED = "cancelled"
 
+
 class Session(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
     id: str
     search_term: str
-    location: Optional[str]
+    location: Optional[str] = None
     created_at: datetime
-    completed_at: Optional[datetime]
+    completed_at: Optional[datetime] = None
     status: SessionStatus
     total_jobs: int = 0
     config: dict
     error_message: Optional[str] = None
-    
-    class Config:
-        use_enum_values = True
+
 
 class SessionSummary(BaseModel):
     """Lightweight session info for listing"""
+    model_config = ConfigDict(use_enum_values=True)
+
     id: str
     search_term: str
-    location: Optional[str]
+    location: Optional[str] = None
     created_at: datetime
     status: SessionStatus
     total_jobs: int

@@ -68,6 +68,9 @@ CREATE TABLE IF NOT EXISTS app_settings (
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_jobs_session_id ON jobs(session_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_site ON jobs(site);
+CREATE INDEX IF NOT EXISTS idx_jobs_title ON jobs(title);
+CREATE INDEX IF NOT EXISTS idx_jobs_company ON jobs(company);
+CREATE INDEX IF NOT EXISTS idx_jobs_scraped_at ON jobs(scraped_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON sessions(created_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
 CREATE INDEX IF NOT EXISTS idx_presets_name ON presets(name);
