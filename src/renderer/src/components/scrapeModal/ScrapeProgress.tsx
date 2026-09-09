@@ -40,7 +40,7 @@ interface ProgressData {
   }>;
   error_message?: string;
   warnings: string[];
-  results_summary?: any;
+  results_summary?: Record<string, unknown>;
 }
 
 const ScrapeProgress: React.FC<{
@@ -50,7 +50,7 @@ const ScrapeProgress: React.FC<{
   onComplete?: () => void;
 }> = ({ sessionId, baseUrl, onCancel, onComplete }) => {
   const [progress, setProgress] = useState<ProgressData | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
+  const [, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isComplete, setIsComplete] = useState(false);
 
@@ -127,7 +127,8 @@ const ScrapeProgress: React.FC<{
         eventSource.close();
       }
     };
-  }, [sessionId, baseUrl, onComplete]); // isComplete intentionally not in deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, baseUrl, onComplete]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);

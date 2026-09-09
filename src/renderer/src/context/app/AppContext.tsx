@@ -29,16 +29,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         isInitialized: true,
         currentStep: 'ready',
       }));
-    } catch (err: any) {
+    } catch (err: unknown) {
       progress.stop();
+      const errorObj = err as { id?: string; message?: string } | undefined;
 
       setState((prev) => ({
         ...prev,
         isLoading: false,
         isInitialized: false,
         error: {
-          id: err.id ?? 'UNKNOWN_ERROR',
-          message: err.message ?? 'Unexpected startup error',
+          id: errorObj?.id ?? 'UNKNOWN_ERROR',
+          message: errorObj?.message ?? 'Unexpected startup error',
         },
       }));
     }
@@ -48,8 +49,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (startedRef.current) return;
     startedRef.current = true;
 
-    initializeApp();
-    return progress.stop;
+    void initializeApp();
+    return () => {
+      progress.stop();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const retry = () => {

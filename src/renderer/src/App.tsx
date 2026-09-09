@@ -1,18 +1,26 @@
-﻿import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import type { ScrapeDraft } from '@/components/scrapeModal/types';
 import { useAppContext } from '@/context/app/AppContext';
 import { MainLayout } from '@/layout/MainLayout';
-import AboutScreen from '@/screens/about/AboutScreen';
 import { SplashScreen } from '@/screens/SplashScreen';
 import { InitErrorScreen } from '@/screens/InitErrorScreen';
-import PresetsScreen from '@/screens/presets/PresetsScreen';
-import ResultsScreen from '@/screens/results/ResultsScreen';
-import SettingsScreen from '@/screens/settings/SettingsPanel';
-
 import Dashboard from '@/screens/dashboard/Dashboard';
-import HistoryScreen from './screens/jobHistory/HistoryScreen';
+
+const AboutScreen = lazy(() => import('@/screens/about/AboutScreen'));
+const PresetsScreen = lazy(() => import('@/screens/presets/PresetsScreen'));
+const ResultsScreen = lazy(() => import('@/screens/results/ResultsScreen'));
+const SettingsScreen = lazy(() => import('@/screens/settings/SettingsPanel'));
+const HistoryScreen = lazy(() => import('./screens/jobHistory/HistoryScreen'));
+
+function RouteLoadingFallback() {
+  return (
+    <div className="flex h-64 w-full items-center justify-center text-sm text-muted-foreground animate-pulse">
+      Loading...
+    </div>
+  );
+}
 
 export type ModalId = 'search' | 'new-scrape';
 
@@ -69,19 +77,49 @@ function App() {
           }
         >
           <Route index element={<Dashboard onNewScrape={() => handleRequestNewScrape()} />} />
-          <Route path="history" element={<HistoryScreen />} />
+          <Route
+            path="history"
+            element={
+              <Suspense fallback={<RouteLoadingFallback />}>
+                <HistoryScreen />
+              </Suspense>
+            }
+          />
           <Route
             path="presets"
             element={
-              <PresetsScreen
-                onUsePreset={(draft) => handleRequestNewScrape(draft)}
-                onCreatePreset={() => handleRequestNewScrape({ save_as_preset: true })}
-              />
+              <Suspense fallback={<RouteLoadingFallback />}>
+                <PresetsScreen
+                  onUsePreset={(draft) => handleRequestNewScrape(draft)}
+                  onCreatePreset={() => handleRequestNewScrape({ save_as_preset: true })}
+                />
+              </Suspense>
             }
           />
-          <Route path="settings" element={<SettingsScreen />} />
-          <Route path="about" element={<AboutScreen />} />
-          <Route path="results/:sessionId" element={<ResultsScreen />} />
+          <Route
+            path="settings"
+            element={
+              <Suspense fallback={<RouteLoadingFallback />}>
+                <SettingsScreen />
+              </Suspense>
+            }
+          />
+          <Route
+            path="about"
+            element={
+              <Suspense fallback={<RouteLoadingFallback />}>
+                <AboutScreen />
+              </Suspense>
+            }
+          />
+          <Route
+            path="results/:sessionId"
+            element={
+              <Suspense fallback={<RouteLoadingFallback />}>
+                <ResultsScreen />
+              </Suspense>
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

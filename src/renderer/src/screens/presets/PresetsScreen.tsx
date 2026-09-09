@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Clock3, Play, Search, Trash2 } from 'lucide-react';
 
 import { deletePreset, fetchPreset, fetchPresets } from '@/api/presets';
@@ -39,7 +39,7 @@ export default function PresetsScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadPresets = async () => {
+  const loadPresets = useCallback(async () => {
     if (!baseUrl) return;
 
     try {
@@ -51,11 +51,11 @@ export default function PresetsScreen({
     } finally {
       setLoading(false);
     }
-  };
+  }, [baseUrl]);
 
   useEffect(() => {
     loadPresets();
-  }, [baseUrl]);
+  }, [loadPresets]);
 
   const filteredPresets = useMemo(() => {
     const query = search.trim().toLowerCase();

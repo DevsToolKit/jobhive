@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 // src/theme/theme.context.tsx
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { Theme } from '@/types/theme.types';

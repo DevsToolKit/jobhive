@@ -58,11 +58,6 @@ export default function SearchSpotlight({
       .catch(() => setPresets([]));
   }, [baseUrl, open]);
 
-  useEffect(() => {
-    if (open) {
-      setQuery('');
-    }
-  }, [open]);
 
   const items = useMemo<SpotlightItem[]>(() => {
     const staticItems: SpotlightItem[] = [
@@ -179,13 +174,18 @@ export default function SearchSpotlight({
     }, {});
   }, [filteredItems]);
 
-  const handleSelect = async (item: SpotlightItem) => {
-    await item.action();
+  const handleClose = () => {
+    setQuery('');
     onClose();
   };
 
+  const handleSelect = async (item: SpotlightItem) => {
+    handleClose();
+    await item.action();
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) handleClose(); }}>
       <DialogContent className="max-w-2xl border-border/70 bg-card/96 p-0 shadow-2xl backdrop-blur-xl">
         <DialogHeader className="border-b border-border/70 px-6 py-5">
           <DialogTitle className="text-xl">Search everything</DialogTitle>

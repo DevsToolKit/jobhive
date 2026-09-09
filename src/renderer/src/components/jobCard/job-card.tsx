@@ -1,45 +1,44 @@
 import React, { useState } from 'react';
 import { Button } from '../ui/button';
-import { GoArrowUpRight } from 'react-icons/go';
-import CardHeader from './CardHeader';
 import { Badge } from '../ui/badge';
-import { Job } from '@/types/job';
+import CardHeader from './CardHeader';
 import JobDetailsDrawer from '@/screens/dashboard/Jobdetailsdrawer';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Job } from '@/types/job';
+import { ArrowUpRight, MapPin, Banknote, Laptop } from 'lucide-react';
 
 interface JobCardProps {
   job: Job;
   tags: string[];
 }
 
-const capitalize = (str: string) => str.charAt(0).toUpperCase() + str.slice(1);
-
 /* ---------------- Date Posted ---------------- */
 
-const calculateDatePosted = (date: string): string => {
-  const now = Date.now();
+const calculateDatePosted = (date?: string): string => {
+  if (!date) return 'Recently';
   const posted = new Date(date).getTime();
+  if (isNaN(posted)) return 'Recently';
 
-  const diffInSeconds = Math.floor((now - posted) / 1000);
-
-  if (diffInSeconds < 0) return 'just now';
+  const diffInSeconds = Math.floor((Date.now() - posted) / 1000);
+  if (diffInSeconds < 60) return 'Just now';
 
   const intervals = [
-    { label: 'year', seconds: 31536000 },
-    { label: 'month', seconds: 2592000 },
-    { label: 'day', seconds: 86400 },
-    { label: 'hr', seconds: 3600 },
-    { label: 'min', seconds: 60 },
-    { label: 'sec', seconds: 1 },
+    { label: 'y', seconds: 31536000 },
+    { label: 'mo', seconds: 2592000 },
+    { label: 'w', seconds: 604800 },
+    { label: 'd', seconds: 86400 },
+    { label: 'h', seconds: 3600 },
+    { label: 'm', seconds: 60 },
   ];
 
   for (const interval of intervals) {
     const count = Math.floor(diffInSeconds / interval.seconds);
     if (count >= 1) {
-      return `${count} ${interval.label}${count > 1 ? 's' : ''} ago`;
+      return `${count}${interval.label} ago`;
     }
   }
 
-  return 'just now';
+  return 'Just now';
 };
 
 /* ---------------- Salary ---------------- */
@@ -58,115 +57,202 @@ const formatAmount = (amount: number): string => {
 };
 
 const normalizeSalary = (
-  minAmount?: number,
-  maxAmount?: number,
-  currency?: string,
-  interval?: string
-): string => {
-  const missingCount = [minAmount, maxAmount, currency, interval].filter(
-    (v) => v === undefined || v === null
-  ).length;
-
-  if (missingCount >= 2) return 'Not Mentioned';
-
+  minAmount?: number | null,
+  maxAmount?: number | null,
+  currency?: string | null,
+  interval?: string | null
+): string | null => {
+  const curr = currency || '';
   const intervalMap: Record<string, string> = {
-    year: 'LPA',
-    month: 'per month',
-    week: 'per week',
-    day: 'per day',
-    hour: 'per hour',
+    year: 'yr',
+    month: 'mo',
+    week: 'wk',
+    day: 'day',
+    hour: 'hr',
   };
+  const intervalLabel = interval ? `/${intervalMap[interval] ?? interval}` : '';
 
-  const intervalLabel = interval ? (intervalMap[interval] ?? `per ${interval}`) : '';
-
-  if (!minAmount && maxAmount) {
-    return `${currency} Up to ${formatAmount(maxAmount)} ${intervalLabel}`;
+  if (minAmount && maxAmount) {
+    return `${curr} ${formatAmount(minAmount)} - ${formatAmount(maxAmount)}${intervalLabel}`;
   }
-
   if (minAmount && !maxAmount) {
-    return `${currency} From ${formatAmount(minAmount)} ${intervalLabel}`;
+    return `From ${curr} ${formatAmount(minAmount)}${intervalLabel}`;
+  }
+  if (!minAmount && maxAmount) {
+    return `Up to ${curr} ${formatAmount(maxAmount)}${intervalLabel}`;
   }
 
-  if (!minAmount || !maxAmount || !currency || !interval) {
-    return 'Not Mentioned';
-  }
+  return null;
+};
 
-  return `${currency} ${formatAmount(minAmount)} - ${formatAmount(maxAmount)} ${intervalLabel}`;
+const formatLocation = (job: Job): string => {
+  const parts = [job.location_city, job.location_state, job.location_country].filter(Boolean);
+  return parts.join(', ') || 'Location not specified';
 };
 
 /* ---------------- Component ---------------- */
 
 const JobCard = React.memo(function JobCard({ job, tags }: JobCardProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const site = capitalize(job.site);
+  const salaryText = normalizeSalary(job.min_amount, job.max_amount, job.currency, job.interval);
+  const locationText = formatLocation(job);
+
+  const handleApply = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.app?.openExternalUrl) {
+      window.app.openExternalUrl(job.job_url);
+    } else {
+      window.open(job.job_url, '_blank');
+    }
+  };
 
   return (
     <>
-      <div className="rounded-[20px] bg-[#f6f5f7] dark:bg-card p-1 w-full">
-        <div className="p-5 bg-white dark:bg-card-secondary rounded-[16px] flex flex-col gap-3">
-          <CardHeader
-            companyName={job.company || 'Not Mentioned'}
-            date={calculateDatePosted(job.date_posted)}
-            company_url={job.company_url}
-          />
+      <div className="group relative rounded-xl border border-border/80 bg-card p-4 hover:border-foreground/25 hover:shadow-md transition-all duration-200 flex flex-col justify-between gap-3 text-left">
+        {/* Top: Company Header */}
+        <CardHeader
+          companyName={job.company || 'Not Mentioned'}
+          date={calculateDatePosted(job.date_posted)}
+          company_url={job.company_url}
+          job_url={job.job_url}
+          site={job.site}
+        />
 
+        {/* Center: Title & Info */}
+        <div className="space-y-2">
+          {/* Job Title */}
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <h3
+                  onClick={() => setDrawerOpen(true)}
+                  className="text-[15px] font-semibold text-foreground hover:text-primary cursor-pointer line-clamp-1 transition-colors leading-snug"
+                >
+                  {job.title}
+                </h3>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p className="font-medium">{job.title}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          {/* Location & Remote Pill */}
+          <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1 truncate max-w-[180px]">
+              <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+              <span className="truncate">{locationText}</span>
+            </span>
+
+            {job.is_remote && (
+              <Badge
+                variant="secondary"
+                className="h-4.5 px-1.5 text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 gap-1 rounded"
+              >
+                <Laptop className="h-2.5 w-2.5" />
+                Remote
+              </Badge>
+            )}
+
+            {job.job_type && (
+              <Badge
+                variant="outline"
+                className="h-4.5 px-1.5 text-[10px] font-medium capitalize border-border/70 rounded"
+              >
+                {job.job_type.replace('_', ' ')}
+              </Badge>
+            )}
+          </div>
+
+          {/* Salary Highlight */}
+          <div className="pt-0.5">
+            {salaryText ? (
+              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/50 text-emerald-700 dark:text-emerald-300 text-xs font-semibold">
+                <Banknote className="h-3.5 w-3.5 shrink-0" />
+                <span>{salaryText}</span>
+              </div>
+            ) : (
+              <span className="text-[11px] text-muted-foreground/70 italic">
+                Salary undisclosed
+              </span>
+            )}
+          </div>
+
+          {/* Description snippet */}
+          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+            {job.description ? job.description.replace(/\s+/g, ' ').trim() : 'No job description provided.'}
+          </p>
+
+          {/* Skills / Tags */}
           <TagsContainer tags={tags} />
-          <JobDescription title={job.title} description={job.description || 'Not Mentioned'} />
         </div>
 
-        <div className="p-5 flex flex-col gap-3">
-          <h3 className="font-semibold">
-            {normalizeSalary(job.min_amount, job.max_amount, job.currency, job.interval)}
-          </h3>
-
-          <Button className="w-full py-5" variant="outline" onClick={() => setDrawerOpen(true)}>
-            View details
+        {/* Bottom: Action Bar */}
+        <div className="pt-2 border-t border-border/50 flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1 h-8 text-xs font-medium cursor-pointer"
+            onClick={() => setDrawerOpen(true)}
+          >
+            Details
           </Button>
 
-          <Button className="w-full py-5" onClick={() => window.app.openExternalUrl(job.job_url)}>
-            Apply now on {site} <GoArrowUpRight />
+          <Button
+            size="sm"
+            className="flex-1 h-8 text-xs font-medium gap-1 cursor-pointer"
+            onClick={handleApply}
+          >
+            Apply
+            <ArrowUpRight className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>
 
-      {/* Job Details Drawer */}
+      {/* Slide-out details drawer */}
       <JobDetailsDrawer job={job} open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </>
   );
 });
 
-/* ---------------- Tags ---------------- */
+/* ---------------- Tags Container ---------------- */
 
-interface TagsContainerProps {
-  tags: string[];
-}
+const TagsContainer = ({ tags }: { tags: string[] }) => {
+  if (!tags || tags.length === 0) return null;
 
-const TagsContainer = ({ tags }: TagsContainerProps) => {
-  if (!tags.length) {
-    return <Badge variant={'secondary'}>N/A</Badge>;
-  }
+  const maxVisible = 3;
+  const visibleTags = tags.slice(0, maxVisible);
+  const remainingCount = tags.length - maxVisible;
 
   return (
-    <div className="flex flex-row gap-3 flex-wrap">
-      {tags.map((tag, index) => (
-        <Badge key={index}>{tag}</Badge>
+    <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+      {visibleTags.map((tag, idx) => (
+        <span
+          key={idx}
+          className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-muted text-muted-foreground border border-border/40"
+        >
+          {tag}
+        </span>
       ))}
-    </div>
-  );
-};
 
-/* ---------------- Description ---------------- */
-
-interface JobDescriptionProps {
-  title: string;
-  description: string;
-}
-
-const JobDescription = ({ title, description }: JobDescriptionProps) => {
-  return (
-    <div>
-      <h2 className="text-[24px] font-semibold line-clamp-1">{title}</h2>
-      <p className="text-[16px] line-clamp-3">{description}</p>
+      {remainingCount > 0 && (
+        <TooltipProvider delayDuration={200}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-muted/60 text-muted-foreground border border-border/40 cursor-help">
+                +{remainingCount} more
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs flex flex-wrap gap-1 p-2">
+              {tags.slice(maxVisible).map((t, i) => (
+                <Badge key={i} variant="secondary" className="text-[10px]">
+                  {t}
+                </Badge>
+              ))}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
     </div>
   );
 };

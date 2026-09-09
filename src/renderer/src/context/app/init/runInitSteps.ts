@@ -6,7 +6,7 @@ export async function runInitSteps(
   steps: readonly InitStep[],
   setState: React.Dispatch<React.SetStateAction<AppState>>,
   progress: {
-    start: (key: any) => void;
+    start: (key: string) => void;
     stop: () => void;
   }
 ) {

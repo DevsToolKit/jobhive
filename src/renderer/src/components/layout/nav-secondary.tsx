@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { type Icon } from '@tabler/icons-react';
 import { Link, useLocation } from 'react-router-dom';
 
 import {
@@ -27,19 +26,23 @@ export function NavSecondary({ items, onModalOpen, ...props }: NavSecondaryProps
   };
 
   return (
-    <SidebarGroup {...props}>
+    <SidebarGroup className="p-0" {...props}>
       <SidebarGroupContent>
-        <SidebarMenu>
+        <SidebarMenu className="gap-1">
           {items.map((item) => {
             const isActive = item.url ? location.pathname === item.url : false;
 
             // Modal items
             if (item.action === 'modal') {
               return (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton tooltip={item.title} onClick={(e) => handleClick(item, e)}>
-                    <item.icon />
-                    <span>{item.title}</span>
+                <SidebarMenuItem key={item.title} className="group-data-[collapsible=icon]:justify-center">
+                  <SidebarMenuButton
+                    tooltip={item.title}
+                    onClick={(e) => handleClick(item, e)}
+                    className="h-9 px-3 rounded-lg text-sm font-normal text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/60 data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground data-[active=true]:font-medium transition-colors cursor-pointer gap-2.5"
+                  >
+                    <item.icon className="size-4 shrink-0" />
+                    <span className="group-data-[collapsible=icon]:hidden">{item.title}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               );
@@ -47,11 +50,16 @@ export function NavSecondary({ items, onModalOpen, ...props }: NavSecondaryProps
 
             // Navigation items
             return (
-              <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton asChild tooltip={item.title} isActive={isActive}>
+              <SidebarMenuItem key={item.title} className="group-data-[collapsible=icon]:justify-center">
+                <SidebarMenuButton
+                  asChild
+                  tooltip={item.title}
+                  isActive={isActive}
+                  className="h-9 px-3 rounded-lg text-sm font-normal text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/60 data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground data-[active=true]:font-medium transition-colors cursor-pointer gap-2.5"
+                >
                   <Link to={item.url || '#'}>
-                    <item.icon />
-                    <span>{item.title}</span>
+                    <item.icon className="size-4 shrink-0" />
+                    <span className="group-data-[collapsible=icon]:hidden">{item.title}</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

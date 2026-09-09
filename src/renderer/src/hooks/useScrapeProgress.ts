@@ -16,7 +16,7 @@ export function useScrapeProgress(sessionId: string | null) {
   const { baseUrl, isReady } = useBackend();
 
   useEffect(() => {
-    if (!sessionId || !isReady) return;
+    if (!sessionId || !isReady || !baseUrl) return;
 
     const es = new EventSource(`${baseUrl}/api/scrape/progress/${sessionId}`);
 
@@ -49,7 +49,7 @@ export function useScrapeProgress(sessionId: string | null) {
     return () => {
       es.close();
     };
-  }, [sessionId]);
+  }, [sessionId, baseUrl, isReady]);
 
   return {
     progress,

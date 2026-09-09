@@ -24,7 +24,7 @@
     "bundle-backend": "powershell -ExecutionPolicy Bypass -File ./scripts/bundle-backend.ps1",
     "postinstall": "electron-builder install-app-deps",
     "clean": "rimraf dist src/renderer/dist",
-    "lint": "eslint src/main --ext .js",
+    "lint": "eslint src/main",
     "format": "prettier --write \"src/main/**/*.js\"",
     "test": "npm run test:backend && npm run test:frontend",
     "test:backend": "node ./scripts/run-python.js -m pytest tests/backend",
@@ -37,12 +37,12 @@
     "semver": "^7.8.5"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1",
+    "concurrently": "^9.2.4",
     "cross-env": "^10.1.0",
-    "electron": "^40.0.0",
+    "electron": "^40.10.6",
     "electron-builder": "^26.4.0",
-    "eslint": "^9.39.2",
-    "prettier": "^3.8.1",
+    "eslint": "^9.39.5",
+    "prettier": "^3.9.6",
     "rimraf": "^6.1.2",
     "wait-on": "^9.0.3"
   },

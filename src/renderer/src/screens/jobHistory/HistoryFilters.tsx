@@ -26,7 +26,7 @@ export function HistoryFilters({ search, status, onSearchChange, onStatusChange 
         className="max-w-sm"
       />
 
-      <Select value={status} onValueChange={(v) => onStatusChange(v as any)}>
+      <Select value={status} onValueChange={(v) => onStatusChange(v as 'all' | Session['status'])}>
         <SelectTrigger className="w-[160px]">
           <SelectValue placeholder="Status" />
         </SelectTrigger>

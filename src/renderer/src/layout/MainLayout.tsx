@@ -44,25 +44,21 @@ export function MainLayout({
     <SidebarProvider
       style={
         {
-          '--sidebar-width': 'calc(var(--spacing) * 62)',
+          '--sidebar-width': '15.5rem',
+          '--sidebar-width-icon': '4.75rem',
           '--header-height': 'calc(var(--spacing) * 12)',
         } as React.CSSProperties
       }
     >
       <AppSidebar variant="inset" onModalOpen={handleModalOpen} onQuickCreate={handleQuickCreate} />
-      <SidebarInset className="bg-card dark:bg-card/90 overflow-hidden">
+      <SidebarInset className="bg-card dark:bg-card/90 overflow-hidden flex flex-col">
         <SiteHeader
           onOpenSearch={() => handleModalOpen('search')}
           onRequestNewScrape={handleQuickCreate}
         />
-        <div className="flex flex-1 flex-col">
-          <div className="@container/main flex flex-1 flex-col gap-2">
-            <div className="px-3 pb-6 pt-3">
-              <Outlet />
-              {/* <div className="min-h-[calc(100vh-var(--header-height)-1.5rem)] rounded-[28px] border border-border/70 bg-card shadow-[0_22px_55px_-40px_rgba(15,23,42,0.28)] dark:bg-card/90 dark:shadow-none">
-                <div className="flex flex-col gap-4 md:gap-6"></div>
-              </div> */}
-            </div>
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+          <div className="@container/main flex flex-1 flex-col min-h-full">
+            <Outlet />
           </div>
         </div>
       </SidebarInset>

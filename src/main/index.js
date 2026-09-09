@@ -142,6 +142,9 @@ function createWindow() {
   const savedBounds = store.get('window.bounds', {});
   const wasMaximized = store.get('window.isMaximized', false);
 
+  const isMac = process.platform === 'darwin';
+  const isWin = process.platform === 'win32';
+
   mainWindow = new BrowserWindow({
     width: savedBounds.width || 1400,
     height: savedBounds.height || 900,
@@ -152,7 +155,19 @@ function createWindow() {
     show: false,
     icon: resolveAppIcon(),
     backgroundColor: '#0f172a',
-    autoHideMenuBar: process.platform !== 'darwin',
+    autoHideMenuBar: !isMac,
+    titleBarStyle: isMac ? 'hiddenInset' : isWin ? 'hidden' : 'default',
+    ...(isMac
+      ? { trafficLightPosition: { x: 16, y: 16 } }
+      : isWin
+        ? {
+            titleBarOverlay: {
+              color: '#0f172a',
+              symbolColor: '#cbd5e1',
+              height: 44,
+            },
+          }
+        : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -162,7 +177,7 @@ function createWindow() {
     },
   });
 
-  if (process.platform !== 'darwin') {
+  if (!isMac) {
     mainWindow.setMenuBarVisibility(false);
   }
 

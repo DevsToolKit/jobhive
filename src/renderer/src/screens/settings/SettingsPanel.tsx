@@ -3,7 +3,6 @@ import {
   ArrowUpRight,
   CheckCircle2,
   Download,
-  HardDrive,
   LoaderCircle,
   Moon,
   RefreshCw,

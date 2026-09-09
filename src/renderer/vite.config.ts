@@ -15,6 +15,43 @@ export default defineConfig({
     outDir: 'dist',
     assetsDir: 'assets',
     emptyOutDir: true,
+    chunkSizeWarningLimit: 800,
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => {
+          if (id.includes('node_modules')) {
+            if (id.includes('react-dom') || id.includes('react-router-dom') || id.includes('react/')) {
+              return 'vendor-react';
+            }
+            if (id.includes('recharts')) {
+              return 'vendor-charts';
+            }
+            if (id.includes('framer-motion')) {
+              return 'vendor-motion';
+            }
+            if (
+              id.includes('@radix-ui') ||
+              id.includes('class-variance-authority') ||
+              id.includes('tailwind-merge') ||
+              id.includes('clsx') ||
+              id.includes('sonner')
+            ) {
+              return 'vendor-ui';
+            }
+            if (
+              id.includes('lucide-react') ||
+              id.includes('@tabler/icons-react') ||
+              id.includes('react-icons')
+            ) {
+              return 'vendor-icons';
+            }
+            if (id.includes('@dnd-kit')) {
+              return 'vendor-dnd';
+            }
+          }
+        },
+      },
+    },
   },
   resolve: {
     alias: {

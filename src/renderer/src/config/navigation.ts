@@ -1,23 +1,23 @@
-import { GoHome, GoHistory, GoCommandPalette, GoSearch, GoGear, GoInfo } from 'react-icons/go';
+import { LayoutDashboard, History, SlidersHorizontal, Search, Settings, Info } from 'lucide-react';
 import type { NavItem } from '@/types/navigation';
 
 export const navMain: NavItem[] = [
   {
     title: 'Dashboard',
     url: '/',
-    icon: GoHome,
+    icon: LayoutDashboard,
     action: 'navigate',
   },
   {
     title: 'Jobs Scrape History',
     url: '/history',
-    icon: GoHistory,
+    icon: History,
     action: 'navigate',
   },
   {
     title: 'Presets',
     url: '/presets',
-    icon: GoCommandPalette,
+    icon: SlidersHorizontal,
     action: 'navigate',
   },
 ];
@@ -25,20 +25,20 @@ export const navMain: NavItem[] = [
 export const navSecondary: NavItem[] = [
   {
     title: 'Search',
-    icon: GoSearch,
+    icon: Search,
     action: 'modal',
     modalId: 'search',
   },
   {
     title: 'Settings',
     url: '/settings',
-    icon: GoGear,
+    icon: Settings,
     action: 'navigate',
   },
   {
     title: 'About',
     url: '/about',
-    icon: GoInfo,
+    icon: Info,
     action: 'navigate',
   },
 ];
