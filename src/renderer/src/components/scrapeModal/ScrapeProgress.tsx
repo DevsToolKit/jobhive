@@ -5,26 +5,39 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   CheckCircle2,
-  XCircle,
-  Clock,
   Loader2,
   Pause,
-  Activity,
-  Zap,
   AlertTriangle,
+  ArrowRight,
 } from 'lucide-react';
 
-interface ProgressData {
+export interface RecentJob {
+  id: string;
+  url?: string;
+  title?: string;
+  company?: string;
+  location?: string;
+  site?: string;
+  status: 'success' | 'failed';
+  duration?: number;
+}
+
+export interface ProgressData {
   session_id: string;
   timestamp: string;
   status: 'processing' | 'scraping' | 'saving' | 'completed' | 'error' | 'cancelled';
+  search_term?: string;
+  location?: string;
+  target_jobs?: number;
   total_jobs: number;
   completed_jobs: number;
   successful_jobs: number;
   failed_jobs: number;
-  skipped_jobs: number;
+  skipped_jobs?: number;
   progress_percent: number;
   current_job?: string;
+  current_site?: string;
+  site_statuses?: Record<string, { status: string; found: number }>;
   current_url?: string;
   current_operation?: string;
   elapsed_time: number;
@@ -32,344 +45,449 @@ interface ProgressData {
   average_job_time: number;
   jobs_per_second: number;
   success_rate: number;
-  recent_jobs: Array<{
-    id: string;
-    url: string;
-    status: 'success' | 'failed';
-    duration: number;
-  }>;
+  recent_jobs: RecentJob[];
   error_message?: string;
   warnings: string[];
   results_summary?: Record<string, unknown>;
 }
 
-const ScrapeProgress: React.FC<{
+interface ScrapeProgressProps {
   sessionId: string;
   baseUrl: string | null;
+  initialQuery?: {
+    search_term?: string;
+    location?: string;
+    target_jobs?: number;
+    sites?: string[];
+  };
   onCancel?: () => void;
   onComplete?: () => void;
-}> = ({ sessionId, baseUrl, onCancel, onComplete }) => {
+  onReset?: () => void;
+  onClose?: () => void;
+}
+
+const getPlatformBadge = (siteName?: string) => {
+  const normalized = (siteName || '').toLowerCase();
+  if (normalized.includes('linkedin')) {
+    return {
+      label: 'LinkedIn',
+      className: 'bg-[#0A66C2]/15 text-[#0A66C2] border-[#0A66C2]/30',
+    };
+  }
+  if (normalized.includes('indeed')) {
+    return {
+      label: 'Indeed',
+      className: 'bg-[#2164F3]/15 text-[#2164F3] border-[#2164F3]/30',
+    };
+  }
+  if (normalized.includes('google')) {
+    return {
+      label: 'Google',
+      className: 'bg-[#EA4335]/15 text-[#EA4335] border-[#EA4335]/30',
+    };
+  }
+  return {
+    label: siteName || 'Platform',
+    className: 'bg-primary/10 text-primary border-primary/20',
+  };
+};
+
+export const ScrapeProgress: React.FC<ScrapeProgressProps> = ({
+  sessionId,
+  baseUrl,
+  initialQuery,
+  onCancel,
+  onComplete,
+  onReset,
+  onClose,
+}) => {
   const [progress, setProgress] = useState<ProgressData | null>(null);
   const [, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isComplete, setIsComplete] = useState(false);
+  const [isCancelled, setIsCancelled] = useState(false);
+  const [liveElapsed, setLiveElapsed] = useState(0);
+  const [autoCloseCountdown, setAutoCloseCountdown] = useState<number | null>(null);
 
   const eventSourceRef = useRef<EventSource | null>(null);
-  const completionHandledRef = useRef(false); // Prevents reconnection after completion
+  const completionHandledRef = useRef(false);
+
+  // Live timer tick during scraping
+  useEffect(() => {
+    if (isComplete || isCancelled || error) return;
+
+    const timer = setInterval(() => {
+      setLiveElapsed((prev) => prev + 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isComplete, isCancelled, error]);
+
+  // Automatic transition countdown when completed
+  useEffect(() => {
+    if (!isComplete) return;
+
+    setAutoCloseCountdown(3);
+
+    const timer = setInterval(() => {
+      setAutoCloseCountdown((prev) => {
+        if (prev === null) return null;
+        if (prev <= 1) {
+          clearInterval(timer);
+          onComplete?.();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isComplete, onComplete]);
 
   useEffect(() => {
-    // Don't reconnect if completion has already been handled
-    if (completionHandledRef.current) {
-      console.log('✅ Completion already handled, skipping reconnection');
-      return;
-    }
+    if (completionHandledRef.current) return;
 
     const sseUrl = `${baseUrl}/api/scrape/progress/${sessionId}`;
-    console.log('🔌 Connecting to SSE:', sseUrl);
-
     const eventSource = new EventSource(sseUrl);
     eventSourceRef.current = eventSource;
 
     eventSource.addEventListener('connected', () => {
-      console.log('✅ SSE Connected');
       setIsConnected(true);
       setError(null);
     });
 
     eventSource.addEventListener('progress', (event) => {
-      console.log('📊 Progress update:', event.data);
-      const data = JSON.parse(event.data);
-      setProgress(data);
+      try {
+        const data: ProgressData = JSON.parse(event.data);
 
-      // Handle completion
-      if (data.status === 'completed' && !completionHandledRef.current) {
-        console.log('🎉 SCRAPING COMPLETED!', data);
+        // Retain recent_jobs and site_statuses so partial updates never wipe them out
+        setProgress((prev) => ({
+          ...(prev || {}),
+          ...data,
+          recent_jobs:
+            data.recent_jobs && data.recent_jobs.length > 0
+              ? data.recent_jobs
+              : prev?.recent_jobs || [],
+          site_statuses:
+            data.site_statuses && Object.keys(data.site_statuses).length > 0
+              ? data.site_statuses
+              : prev?.site_statuses || {},
+        } as ProgressData));
 
-        // Mark completion as handled to prevent reconnection
-        completionHandledRef.current = true;
-        setIsComplete(true);
+        if (data.elapsed_time > 0) {
+          setLiveElapsed(Math.round(data.elapsed_time));
+        }
 
-        // Close the EventSource immediately
-        eventSource.close();
-        setIsConnected(false);
+        if (data.status === 'cancelled') {
+          setIsCancelled(true);
+          eventSource.close();
+          setIsConnected(false);
+          return;
+        }
 
-        // Wait 2 seconds to show completion state, then trigger callback
-        setTimeout(() => {
-          if (onComplete) {
-            console.log('🔄 Calling onComplete callback');
-            onComplete();
-          }
-        }, 2000);
+        if (data.status === 'completed' && !completionHandledRef.current) {
+          completionHandledRef.current = true;
+          setIsComplete(true);
+          eventSource.close();
+          setIsConnected(false);
+        }
+      } catch (err) {
+        console.error('Error parsing progress SSE:', err);
       }
     });
 
-    eventSource.addEventListener('close', (event) => {
-      console.log('🔌 SSE Closed', event);
+    eventSource.addEventListener('close', () => {
       eventSource.close();
       setIsConnected(false);
     });
 
-    eventSource.onerror = (err) => {
-      console.error('❌ SSE Error:', err);
-
-      // Only show error if we haven't completed successfully
+    eventSource.onerror = () => {
       if (!completionHandledRef.current && !isComplete) {
-        setError('Connection error. The scraping may have completed.');
+        setError('Connection interrupted. Scraping may still be finalizing.');
       }
-
       setIsConnected(false);
       eventSource.close();
     };
 
     return () => {
-      console.log('🧹 Cleaning up SSE connection');
       if (eventSource.readyState !== EventSource.CLOSED) {
         eventSource.close();
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, baseUrl, onComplete]);
+  }, [sessionId, baseUrl, isComplete]);
+
+  const handleUserCancel = () => {
+    setIsCancelled(true);
+    if (onCancel) onCancel();
+  };
+
+  const handlePauseAutoClose = () => {
+    setAutoCloseCountdown(null);
+  };
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
-    return `${mins}m ${secs}s`;
+    return `${mins}m ${secs < 10 ? '0' : ''}${secs}s`;
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
-      case 'error':
-        return 'bg-red-500/10 text-red-600 border-red-500/20';
-      case 'cancelled':
-        return 'bg-amber-500/10 text-amber-600 border-amber-500/20';
-      case 'scraping':
-      case 'saving':
-      case 'processing':
-      default:
-        return 'bg-blue-500/10 text-blue-600 border-blue-500/20';
-    }
-  };
+  const searchTerm = progress?.search_term || initialQuery?.search_term || 'Job Search';
+  const location = progress?.location || initialQuery?.location || 'Anywhere';
+  const targetJobs = progress?.target_jobs || initialQuery?.target_jobs || progress?.total_jobs || 20;
+  const successfulJobs = progress?.successful_jobs || 0;
+  const progressPercent =
+    progress?.progress_percent ??
+    (targetJobs > 0 ? Math.min(100, Math.round((successfulJobs / targetJobs) * 100)) : 0);
+  const recentJobs = progress?.recent_jobs || [];
+  const siteStatuses = progress?.site_statuses || {};
+  const allSites =
+    initialQuery?.sites && initialQuery.sites.length > 0
+      ? initialQuery.sites
+      : Object.keys(siteStatuses).length > 0
+        ? Object.keys(siteStatuses)
+        : ['linkedin', 'indeed'];
 
-  const isActiveStatus = (status: string) => {
-    return ['processing', 'scraping', 'saving'].includes(status);
-  };
-
-  // Error state (only if not completed)
-  if (error && !isComplete) {
-    return (
-      <div className="w-full p-8">
-        <div className="flex flex-col items-center justify-center gap-3 text-sm">
-          <AlertTriangle className="h-8 w-8 text-amber-500" />
-          <span className="text-amber-600">{error}</span>
-          <span className="text-neutral-500 text-xs">Session: {sessionId}</span>
-          {progress && (
-            <div className="mt-4 text-center">
-              <p className="text-sm text-neutral-600">
-                Last known status: {progress.successful_jobs} jobs saved
-              </p>
-              <Button className="mt-4" onClick={() => window.location.reload()}>
-                Refresh Page
-              </Button>
+  return (
+    <div className="w-full max-w-full overflow-hidden space-y-4">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3 pb-2.5 border-b border-border/60 min-w-0 pr-8">
+        <div className="space-y-1 min-w-0 flex-1 overflow-hidden">
+          <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
+            <h3 className="text-xl font-bold tracking-tight text-foreground truncate max-w-full">
+              {searchTerm}
+            </h3>
+            <div className="shrink-0">
+              {isComplete ? (
+                <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-xs px-2.5 py-0.5 font-medium gap-1.5 shadow-none">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Done
+                </Badge>
+              ) : isCancelled ? (
+                <Badge variant="outline" className="bg-amber-500/15 text-amber-600 border-amber-500/30 text-xs px-2.5 py-0.5 font-medium gap-1.5 shadow-none">
+                  <Pause className="h-3.5 w-3.5" /> Stopped
+                </Badge>
+              ) : error ? (
+                <Badge variant="outline" className="bg-destructive/15 text-destructive border-destructive/30 text-xs px-2.5 py-0.5 font-medium gap-1.5 shadow-none">
+                  <AlertTriangle className="h-3.5 w-3.5" /> Error
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/25 text-xs px-2.5 py-0.5 font-medium gap-1.5 animate-pulse shadow-none">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Scraping
+                </Badge>
+              )}
             </div>
+          </div>
+          <p className="text-sm text-muted-foreground truncate">
+            {location} • Target: {targetJobs} jobs
+          </p>
+        </div>
+      </div>
+
+      {/* Platform Badges */}
+      <div className="flex flex-wrap gap-2 w-full min-w-0 overflow-hidden">
+        {allSites.map((site) => {
+          const statusInfo = siteStatuses[site];
+          const platformBadge = getPlatformBadge(site);
+          const isCurrent = progress?.current_site === site;
+          const foundCount = statusInfo?.found ?? 0;
+          const siteStatus = statusInfo?.status || (isCurrent ? 'scraping' : 'queued');
+
+          return (
+            <div
+              key={site}
+              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all truncate ${
+                isCancelled
+                  ? foundCount > 0
+                    ? 'border-emerald-500/30 bg-emerald-500/10 text-foreground'
+                    : 'border-border/70 bg-muted/20 text-muted-foreground'
+                  : siteStatus === 'completed'
+                    ? 'border-emerald-500/30 bg-emerald-500/10 text-foreground'
+                    : isCurrent || siteStatus === 'scraping'
+                      ? 'border-primary/40 bg-primary/10 text-foreground ring-1 ring-primary/20'
+                      : 'border-border/70 bg-muted/20 text-muted-foreground'
+              }`}
+            >
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${platformBadge.className}`}>
+                {platformBadge.label}
+              </span>
+              {foundCount > 0 && (
+                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{foundCount} found</span>
+              )}
+              {foundCount === 0 && isCancelled && (isCurrent || siteStatus === 'scraping') && (
+                <span className="text-amber-600 dark:text-amber-400 font-medium">stopped</span>
+              )}
+              {foundCount === 0 && isCancelled && siteStatus === 'queued' && (
+                <span className="text-muted-foreground/60">cancelled</span>
+              )}
+              {!isCancelled && (isCurrent || siteStatus === 'scraping') && (
+                <span className="text-primary flex items-center gap-1 font-medium">
+                  <Loader2 className="h-3 w-3 animate-spin" /> searching
+                </span>
+              )}
+              {!isCancelled && siteStatus === 'queued' && <span className="text-muted-foreground/70">queued</span>}
+              {siteStatus === 'no_results' && <span className="text-muted-foreground/60">0 results</span>}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Progress Bar & Status */}
+      <div className="space-y-2 rounded-2xl border border-border/70 bg-muted/20 p-4 min-w-0 overflow-hidden">
+        <div className="flex items-center justify-between text-sm font-medium min-w-0">
+          <span className="text-foreground truncate">
+            {successfulJobs} of {targetJobs} jobs collected
+          </span>
+          <span className="text-muted-foreground tabular-nums text-xs font-medium flex-shrink-0 ml-2">
+            {Math.round(progressPercent)}% • {formatTime(liveElapsed)}
+          </span>
+        </div>
+
+        <Progress value={progressPercent} className="h-2 bg-muted rounded-full" />
+
+        <p className="text-xs text-muted-foreground truncate pt-0.5 min-w-0">
+          {isCancelled
+            ? successfulJobs > 0
+              ? `Scraping stopped by user. ${successfulJobs} jobs saved before cancellation.`
+              : 'Scraping was cancelled. No listings were saved.'
+            : isComplete
+              ? autoCloseCountdown !== null && autoCloseCountdown > 0
+                ? `All ${successfulJobs} jobs saved. Transitioning to table in ${autoCloseCountdown}s...`
+                : `All ${successfulJobs} jobs saved to workspace.`
+              : progress?.current_operation || 'Connecting to platforms...'}
+        </p>
+      </div>
+
+      {/* Recent Activity List */}
+      <div className="rounded-2xl border border-border/70 bg-card overflow-hidden min-w-0">
+        <div className="px-4 py-2 border-b border-border/60 bg-muted/20 text-xs font-semibold uppercase tracking-wider text-muted-foreground flex justify-between items-center">
+          <span>Recent activity</span>
+          <span className="font-normal normal-case">{recentJobs.length} listings</span>
+        </div>
+
+        {recentJobs.length > 0 ? (
+          <ScrollArea className="h-40 w-full overflow-hidden [&>[data-slot=scroll-area-viewport]>div]:!block">
+            <div className="p-2 pr-4 space-y-1.5 w-full min-w-0">
+              {recentJobs.map((job, idx) => {
+                const badge = getPlatformBadge(job.site);
+                return (
+                  <div
+                    key={job.id || idx}
+                    className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl hover:bg-muted/40 transition text-sm w-full min-w-0"
+                  >
+                    <div className="min-w-0 flex-1 overflow-hidden">
+                      <p className="font-medium text-foreground truncate text-sm">{job.title || 'Untitled Role'}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {job.company || 'Unknown Company'}
+                        {job.location && <span> • {job.location}</span>}
+                      </p>
+                    </div>
+
+                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-medium border shrink-0 ${badge.className}`}>
+                      {badge.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </ScrollArea>
+        ) : isCancelled ? (
+          <div className="flex flex-col items-center justify-center py-8 text-center text-sm text-muted-foreground gap-1.5">
+            <span className="font-medium text-foreground">Scraping cancelled</span>
+            <span className="text-xs text-muted-foreground">No listings were collected before cancellation.</span>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center py-8 text-center text-sm text-muted-foreground gap-2">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <span>Searching platforms for listings...</span>
+          </div>
+        )}
+      </div>
+
+      {/* Action Footer */}
+      <div className="flex items-center justify-between pt-2 min-w-0">
+        <div className="text-xs text-muted-foreground truncate flex items-center gap-2 min-w-0">
+          {isCancelled ? (
+            <span className="text-amber-600 dark:text-amber-400 font-medium">Scrape cancelled</span>
+          ) : (
+            <span>Session: {sessionId.slice(0, 8)}...</span>
+          )}
+          {isComplete && autoCloseCountdown !== null && (
+            <button
+              type="button"
+              onClick={handlePauseAutoClose}
+              className="text-[11px] text-primary hover:underline cursor-pointer"
+            >
+              (Stay on dialog)
+            </button>
+          )}
+        </div>
+
+        <div className="flex-shrink-0 ml-2">
+          {isCancelled ? (
+            <div className="flex items-center gap-2">
+              {successfulJobs > 0 ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onClose || onComplete}
+                    className="text-sm h-9 px-4 cursor-pointer text-muted-foreground hover:text-foreground"
+                  >
+                    Close
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={onComplete}
+                    className="gap-2 text-sm h-9 px-4 font-medium cursor-pointer shadow-sm"
+                  >
+                    <span>View {successfulJobs} Jobs in Table</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onReset}
+                    className="text-sm h-9 px-4 cursor-pointer text-muted-foreground hover:text-foreground"
+                  >
+                    Back to Search
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={onClose}
+                    className="text-sm h-9 px-4 font-medium cursor-pointer shadow-sm"
+                  >
+                    Close
+                  </Button>
+                </>
+              )}
+            </div>
+          ) : !isComplete ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleUserCancel}
+              className="text-sm h-9 px-4 text-muted-foreground hover:text-foreground cursor-pointer"
+            >
+              Cancel Scraping
+            </Button>
+          ) : (
+            <Button
+              onClick={onComplete}
+              className="gap-2 text-sm h-9 px-4 font-medium cursor-pointer shadow-sm"
+            >
+              <span>View Jobs in Table</span>
+              {autoCloseCountdown !== null && autoCloseCountdown > 0 && (
+                <span className="tabular-nums">({autoCloseCountdown}s)</span>
+              )}
+              <ArrowRight className="h-4 w-4" />
+            </Button>
           )}
         </div>
       </div>
-    );
-  }
-
-  // Loading state
-  if (!progress) {
-    return (
-      <div className="w-full p-8">
-        <div className="flex flex-col items-center justify-center gap-3 text-sm text-neutral-500">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <span className="font-light tracking-wide">Connecting to scraper...</span>
-          <span className="text-xs font-mono text-neutral-400">{sessionId}</span>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="w-full space-y-6">
-      {/* Status Header */}
-      <div className="space-y-6">
-        {/* Title and Status Badge */}
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
-            <h3 className="text-base font-medium tracking-tight">Web Scraping Session</h3>
-            <p className="text-xs text-neutral-500 font-mono">{sessionId}</p>
-          </div>
-          <Badge variant="outline" className={`${getStatusColor(progress.status)} font-normal`}>
-            {isActiveStatus(progress.status) && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
-            {progress.status === 'completed' && <CheckCircle2 className="mr-1.5 h-3 w-3" />}
-            {progress.status === 'error' && <XCircle className="mr-1.5 h-3 w-3" />}
-            {progress.status.charAt(0).toUpperCase() + progress.status.slice(1)}
-          </Badge>
-        </div>
-
-        {/* Progress Bar */}
-        <div className="space-y-2">
-          <div className="flex items-baseline justify-between text-xs">
-            <span className="text-neutral-600 font-light">
-              {progress.completed_jobs} of {progress.total_jobs} jobs
-            </span>
-            <span className="font-mono text-neutral-900 tabular-nums">
-              {Math.round(progress.progress_percent)}%
-            </span>
-          </div>
-          <Progress value={progress.progress_percent} className="h-1.5 bg-neutral-100" />
-        </div>
-
-        {/* Metrics Grid */}
-        <div className="grid grid-cols-4 gap-4">
-          <MetricCard
-            icon={<CheckCircle2 className="h-3.5 w-3.5" />}
-            label="Success"
-            value={progress.successful_jobs}
-            color="text-emerald-600"
-          />
-          <MetricCard
-            icon={<XCircle className="h-3.5 w-3.5" />}
-            label="Failed"
-            value={progress.failed_jobs}
-            color="text-red-600"
-          />
-          <MetricCard
-            icon={<Clock className="h-3.5 w-3.5" />}
-            label="Elapsed"
-            value={formatTime(progress.elapsed_time)}
-            color="text-blue-600"
-          />
-          <MetricCard
-            icon={<Zap className="h-3.5 w-3.5" />}
-            label="Rate"
-            value={`${progress.jobs_per_second.toFixed(1)}/s`}
-            color="text-purple-600"
-          />
-        </div>
-      </div>
-
-      {/* Current Operation */}
-      {progress.current_operation && (
-        <div className="border-t border-neutral-100 bg-neutral-50/50 px-4 py-3 -mx-6">
-          <div className="flex items-center gap-2 text-xs">
-            <Activity className="h-3 w-3 text-neutral-400" />
-            <span className="text-neutral-500 font-light">Current:</span>
-            <span className="text-neutral-900 font-mono truncate">
-              {progress.current_url || progress.current_operation}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Performance Stats */}
-      <div className="border border-neutral-200 rounded-lg p-4">
-        <div className="grid grid-cols-3 gap-4">
-          <StatItem label="Success Rate" value={`${Math.round(progress.success_rate)}%`} />
-          <StatItem label="Avg Time" value={`${progress.average_job_time.toFixed(2)}s`} />
-          <StatItem
-            label="Remaining"
-            value={
-              progress.estimated_remaining && progress.estimated_remaining > 0
-                ? formatTime(progress.estimated_remaining)
-                : '—'
-            }
-          />
-        </div>
-      </div>
-
-      {/* Recent Jobs */}
-      {progress.recent_jobs && progress.recent_jobs.length > 0 && (
-        <div className="border border-neutral-200 rounded-lg overflow-hidden">
-          <div className="px-4 py-3 border-b border-neutral-100 bg-neutral-50/50">
-            <h4 className="text-xs font-medium text-neutral-600 tracking-wide uppercase">
-              Recent Activity
-            </h4>
-          </div>
-          <ScrollArea className="h-48">
-            <div className="p-2 space-y-1">
-              {progress.recent_jobs.map((job, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center justify-between px-3 py-2 rounded-md hover:bg-neutral-50 transition-colors"
-                >
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    {job.status === 'success' ? (
-                      <CheckCircle2 className="h-3 w-3 text-emerald-500 flex-shrink-0" />
-                    ) : (
-                      <XCircle className="h-3 w-3 text-red-500 flex-shrink-0" />
-                    )}
-                    <span className="text-xs font-mono text-neutral-600 truncate">{job.url}</span>
-                  </div>
-                  <span className="text-xs text-neutral-400 tabular-nums">
-                    {job.duration.toFixed(2)}s
-                  </span>
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
-        </div>
-      )}
-
-      {/* Warnings */}
-      {progress.warnings && progress.warnings.length > 0 && (
-        <div className="border border-amber-200 bg-amber-50/50 rounded-lg p-4">
-          <div className="flex gap-3">
-            <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              {progress.warnings.map((warning, idx) => (
-                <p key={idx} className="text-xs text-amber-800">
-                  {warning}
-                </p>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Actions */}
-      {isActiveStatus(progress.status) && onCancel && (
-        <div className="flex justify-end pt-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onCancel}
-            className="border-neutral-200 hover:bg-neutral-50"
-          >
-            <Pause className="mr-2 h-3.5 w-3.5" />
-            Cancel Scraping
-          </Button>
-        </div>
-      )}
     </div>
   );
 };
-
-const MetricCard: React.FC<{
-  icon: React.ReactNode;
-  label: string;
-  value: number | string;
-  color: string;
-}> = ({ icon, label, value, color }) => (
-  <div className="space-y-1">
-    <div className={`flex items-center gap-1.5 ${color}`}>
-      {icon}
-      <span className="text-[10px] font-medium tracking-wide uppercase text-neutral-500">
-        {label}
-      </span>
-    </div>
-    <div className="text-lg font-semibold tabular-nums tracking-tight">{value}</div>
-  </div>
-);
-
-const StatItem: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <div className="text-center">
-    <div className="text-xs text-neutral-500 font-light mb-0.5">{label}</div>
-    <div className="text-sm font-mono text-neutral-900 tabular-nums">{value}</div>
-  </div>
-);
 
 export default ScrapeProgress;

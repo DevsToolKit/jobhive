@@ -53,6 +53,55 @@ const getInitials = (name: string): string => {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 };
 
+const KNOWN_ACRONYMS = new Set([
+  'AI', 'ML', 'UI', 'UX', 'API', 'APIs', 'REST', 'SQL', 'QA', 'IT', 'HR',
+  'PHP', 'AWS', 'GCP', 'SEO', 'PR', 'CEO', 'CTO', 'CFO', 'VP', 'SVP',
+  'B2B', 'B2C', 'SaaS', 'PaaS', 'IaaS', 'SDK', 'CLI', 'ERP', 'CRM',
+  'HTML', 'CSS', 'JS', 'TS', 'DB', 'DBA', 'LLM', 'NLP', 'CI/CD', 'ETL',
+  'NET', '.NET', 'C#', 'C++', 'WPF', 'WCF'
+]);
+
+const MINOR_WORDS = new Set([
+  'and', 'as', 'at', 'but', 'by', 'for', 'in', 'nor', 'of', 'on', 'or', 'so', 'the', 'to', 'with', 'a', 'an'
+]);
+
+/**
+ * Normalizes title text to uniform Title Case (e.g. "Key Responsibilities", "Requirements", "Full Stack Developer").
+ */
+export function toNormalCase(str?: string | null): string {
+  if (!str) return '';
+  const trimmed = str.trim();
+  if (!trimmed) return '';
+
+  return trimmed
+    .split(/\s+/)
+    .map((word, index, arr) => {
+      const core = word.replace(/^[^a-zA-Z0-9#+.]+|[^a-zA-Z0-9#+.]+$/g, '');
+      const upperCore = core.toUpperCase();
+
+      if (KNOWN_ACRONYMS.has(upperCore)) {
+        return word.replace(core, upperCore);
+      }
+
+      if (/^\.?net$/i.test(core)) {
+        return word.replace(core, '.NET');
+      }
+
+      const lower = core.toLowerCase();
+      if (index > 0 && index < arr.length - 1 && MINOR_WORDS.has(lower)) {
+        return word.replace(core, lower);
+      }
+
+      if (core.length > 0) {
+        const capitalized = core.charAt(0).toUpperCase() + core.slice(1).toLowerCase();
+        return word.replace(core, capitalized);
+      }
+
+      return word;
+    })
+    .join(' ');
+}
+
 /**
  * Parses raw, often-unformatted scraped job descriptions into clean, readable structured sections.
  */
@@ -111,7 +160,7 @@ function parseJobDescription(raw?: string): ParsedSection[] {
     if (!part) continue;
 
     if (headerPattern.test(part)) {
-      currentTitle = part.replace(/:$/, '').trim();
+      currentTitle = toNormalCase(part.replace(/:$/, '').trim());
     } else {
       const isList =
         currentTitle &&
@@ -319,7 +368,7 @@ export default function JobDetailsDrawer({ job, open, onClose }: JobDetailsDrawe
 
           {/* Job Title */}
           <SheetTitle className="text-xl font-bold tracking-tight text-foreground leading-snug">
-            {job.title}
+            {toNormalCase(job.title)}
           </SheetTitle>
 
           {/* Action Buttons Bar */}
@@ -450,7 +499,7 @@ export default function JobDetailsDrawer({ job, open, onClose }: JobDetailsDrawe
                 <div key={sIdx} className="space-y-2.5">
                   {section.title && (
                     <h3 className="text-sm font-semibold tracking-tight text-foreground border-b border-border/40 pb-1.5">
-                      {section.title}
+                      {toNormalCase(section.title)}
                     </h3>
                   )}
 

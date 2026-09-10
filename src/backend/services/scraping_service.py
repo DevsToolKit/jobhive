@@ -1,4 +1,5 @@
 import json
+import math
 import time
 from typing import Callable, Optional
 import pandas as pd
@@ -45,31 +46,58 @@ class ScrapingService:
         }
 
         try:
-            # Send initial progress
+            site_names = [site.value for site in config.sites]
+            site_statuses = {s: {"status": "queued", "found": 0} for s in site_names}
+
+            # Send initial progress with accurate target_jobs
             if progress_callback:
                 progress_callback({
                     "session_id": session_id,
                     "status": "processing",
-                    "total_jobs": 0,
+                    "search_term": config.search_term,
+                    "location": config.location or "",
+                    "target_jobs": config.results_wanted,
+                    "total_jobs": config.results_wanted,
                     "completed_jobs": 0,
                     "successful_jobs": 0,
                     "failed_jobs": 0,
+                    "progress_percent": 0,
                     "elapsed_time": 0,
-                    "current_operation": "Initializing scrape...",
+                    "site_statuses": site_statuses,
+                    "current_operation": f"Preparing search across {len(site_names)} platform{'s' if len(site_names) > 1 else ''}...",
                 })
 
-            self._scrape_and_save(session_id, config, progress_callback, start_time)
+            save_result = self._scrape_and_save(session_id, config, progress_callback, start_time)
+            final_saved = save_result[0] if isinstance(save_result, tuple) else 0
+            final_site_statuses = save_result[1] if isinstance(save_result, tuple) else site_statuses
+            final_recent_jobs = save_result[2] if isinstance(save_result, tuple) else []
+            final_warnings = save_result[3] if isinstance(save_result, tuple) else []
 
             if not self.is_cancelled(session_id):
                 self._update_session_status(session_id, SessionStatus.COMPLETED)
 
                 if progress_callback:
                     elapsed = time.time() - start_time
+                    # Get final total from DB
+                    with get_db() as conn:
+                        row = conn.execute("SELECT total_jobs FROM sessions WHERE id = ?", (session_id,)).fetchone()
+                        final_total = row["total_jobs"] if row and row["total_jobs"] is not None else final_saved
+
                     progress_callback({
                         "session_id": session_id,
                         "status": "completed",
+                        "search_term": config.search_term,
+                        "location": config.location or "",
+                        "target_jobs": config.results_wanted,
+                        "total_jobs": final_total,
+                        "completed_jobs": final_total,
+                        "successful_jobs": final_total,
+                        "progress_percent": 100,
                         "elapsed_time": elapsed,
-                        "current_operation": "Scraping completed successfully",
+                        "current_operation": f"Scraping completed. {final_total} jobs saved.",
+                        "site_statuses": final_site_statuses,
+                        "recent_jobs": final_recent_jobs[-10:],
+                        "warnings": final_warnings,
                     })
 
         except Exception as e:
@@ -84,6 +112,7 @@ class ScrapingService:
                         "session_id": session_id,
                         "status": "error",
                         "error_message": str(e),
+                        "current_operation": f"Scraping stopped due to an error: {e}",
                     })
             raise
 
@@ -104,81 +133,269 @@ class ScrapingService:
         start_time: float
     ):
         site_names = [site.value for site in config.sites]
+        target_total = config.results_wanted
+        site_statuses = {s: {"status": "queued", "found": 0} for s in site_names}
+        warnings = []
+        recent_jobs = []
+        seen_urls = set()
 
-        scrape_params = {
-            "site_name": site_names,
-            "search_term": config.search_term,
-            "results_wanted": config.results_wanted,
-            "country_indeed": config.country_indeed,
-        }
+        total_saved = 0
+        total_failed = 0
 
-        if "linkedin" in site_names:
-            scrape_params.update({
-                "linkedin_fetch_description": True,
-                "verbose": 0,
-            })
+        for site_idx, site in enumerate(site_names):
+            if self.is_cancelled(session_id):
+                logger.info(f"Scrape cancelled for session {session_id}")
+                break
 
-        if config.location:
-            scrape_params["location"] = config.location
-        if config.distance:
-            scrape_params["distance"] = config.distance
-        if config.job_type:
-            scrape_params["job_type"] = config.job_type.value
-        if config.is_remote is not None:
-            scrape_params["is_remote"] = config.is_remote
-        if config.hours_old:
-            scrape_params["hours_old"] = config.hours_old
-        if config.offset:
-            scrape_params["offset"] = config.offset
+            # If we have reached target_total, skip remaining sites
+            if total_saved >= target_total:
+                site_statuses[site] = {"status": "skipped", "found": 0}
+                continue
 
-        if progress_callback:
-            elapsed = time.time() - start_time
-            progress_callback({
-                "session_id": session_id,
-                "status": "processing",
-                "elapsed_time": elapsed,
-                "current_operation": f"Scraping jobs from {', '.join(site_names)}...",
-            })
+            remaining_needed = target_total - total_saved
+            # Request all remaining needed jobs for this site so that any shortfall from other sites is fulfilled
+            site_target = remaining_needed
 
-        jobs_df = scrape_jobs(**scrape_params)
+            site_statuses[site]["status"] = "scraping"
+            site_label = site.capitalize()
 
-        if self.is_cancelled(session_id):
-            return
-
-        if jobs_df is None or jobs_df.empty:
             if progress_callback:
+                elapsed = time.time() - start_time
                 progress_callback({
                     "session_id": session_id,
-                    "status": "completed",
-                    "total_jobs": 0,
-                    "completed_jobs": 0,
-                    "successful_jobs": 0,
-                    "warnings": ["No jobs found matching the search criteria"],
+                    "status": "scraping",
+                    "search_term": config.search_term,
+                    "location": config.location or "",
+                    "target_jobs": target_total,
+                    "total_jobs": target_total,
+                    "completed_jobs": total_saved,
+                    "successful_jobs": total_saved,
+                    "failed_jobs": total_failed,
+                    "progress_percent": min(100, round((total_saved / target_total) * 100)) if target_total > 0 else 0,
+                    "elapsed_time": elapsed,
+                    "current_site": site,
+                    "site_statuses": site_statuses,
+                    "current_operation": f"Searching {site_label} for '{config.search_term}'...",
+                    "recent_jobs": recent_jobs[-6:] if recent_jobs else [],
+                    "warnings": warnings,
                 })
-            return
 
-        total_jobs = len(jobs_df)
+            scrape_params = {
+                "site_name": site,
+                "search_term": config.search_term,
+                "results_wanted": site_target,
+                "country_indeed": config.country_indeed,
+            }
 
-        if progress_callback:
-            elapsed = time.time() - start_time
-            progress_callback({
-                "session_id": session_id,
-                "status": "processing",
-                "total_jobs": total_jobs,
-                "completed_jobs": 0,
-                "elapsed_time": elapsed,
-                "current_operation": f"Found {total_jobs} jobs, now saving to database...",
-            })
+            if site == "linkedin":
+                scrape_params.update({
+                    "linkedin_fetch_description": True,
+                    "verbose": 0,
+                })
 
-        jobs_saved = self._save_jobs_to_db(
-            session_id, jobs_df, progress_callback, start_time, total_jobs
-        )
+            if config.location:
+                scrape_params["location"] = config.location
+            if config.distance:
+                scrape_params["distance"] = config.distance
+            if config.job_type:
+                scrape_params["job_type"] = config.job_type.value
+            if config.is_remote is not None:
+                scrape_params["is_remote"] = config.is_remote
+            if config.hours_old:
+                scrape_params["hours_old"] = config.hours_old
+            if config.offset:
+                scrape_params["offset"] = config.offset
 
+            try:
+                jobs_df = scrape_jobs(**scrape_params)
+            except Exception as e:
+                logger.warning(f"Error scraping {site}: {e}")
+                site_statuses[site]["status"] = "error"
+                warnings.append(f"{site_label} error: {str(e)[:80]}")
+                continue
+
+            if self.is_cancelled(session_id):
+                break
+
+            if jobs_df is None or jobs_df.empty:
+                site_statuses[site]["status"] = "no_results"
+                warnings.append(f"No results returned from {site_label}")
+                continue
+
+            site_statuses[site]["status"] = "saving"
+            site_saved = 0
+
+            # Normalize DataFrame
+            jobs_df = jobs_df.replace({pd.NaT: None})
+            jobs_df = jobs_df.where(pd.notna(jobs_df), None)
+
+            REQUIRED_COLUMNS = [
+                "site", "title", "company", "company_url", "job_url",
+                "location", "is_remote", "description", "job_type",
+                "interval", "min_amount", "max_amount", "currency",
+                "date_posted", "emails", "job_level", "company_industry"
+            ]
+            for col in REQUIRED_COLUMNS:
+                if col not in jobs_df.columns:
+                    jobs_df[col] = None
+
+            with get_db() as conn:
+                cursor = conn.cursor()
+
+                for idx, row in jobs_df.iterrows():
+                    if self.is_cancelled(session_id) or total_saved >= target_total:
+                        break
+
+                    job_url = row.get("job_url") or f"{site}_{idx}_{time.time()}"
+                    if job_url in seen_urls:
+                        continue
+                    seen_urls.add(job_url)
+
+                    job_start = time.time()
+                    try:
+                        city = state = country = None
+                        if row["location"]:
+                            parts = [p.strip() for p in row["location"].split(",")]
+                            city = parts[0] if len(parts) > 0 else None
+                            state = parts[1] if len(parts) > 1 else None
+                            country = parts[2] if len(parts) > 2 else None
+
+                        raw_desc = row["description"] or ""
+                        cleaned_desc = clean_description(raw_desc)
+
+                        min_amount = safe_float(row["min_amount"])
+                        max_amount = safe_float(row["max_amount"])
+                        currency = row["currency"]
+                        interval = row["interval"]
+
+                        if min_amount is None and max_amount is None:
+                            extracted = extract_compensation_from_text(cleaned_desc)
+                            if extracted:
+                                min_amount, max_amount, currency, interval = extracted
+
+                        date_posted = None
+                        if row["date_posted"]:
+                            try:
+                                date_posted = pd.to_datetime(row["date_posted"]).isoformat()
+                            except Exception:
+                                pass
+
+                        is_remote = bool(row["is_remote"]) if row["is_remote"] is not None else False
+                        tags = json.dumps(extract_tags(row))
+
+                        cursor.execute("""
+                            INSERT INTO jobs (
+                                session_id, site, title, company, company_url, job_url,
+                                location_country, location_city, location_state,
+                                is_remote, description, tags, job_type, interval,
+                                min_amount, max_amount, currency, date_posted,
+                                emails, job_level, company_industry
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            session_id, row["site"] or site, row["title"], row["company"],
+                            row["company_url"], row["job_url"], country, city, state,
+                            is_remote, cleaned_desc, tags, row["job_type"], interval,
+                            min_amount, max_amount, currency, date_posted,
+                            row["emails"], row["job_level"], row["company_industry"],
+                        ))
+
+                        total_saved += 1
+                        site_saved += 1
+                        job_duration = time.time() - job_start
+
+                        job_item = {
+                            "id": str(total_saved),
+                            "url": row["job_url"] or "",
+                            "title": row["title"] or "Untitled Role",
+                            "company": row["company"] or "Unknown Company",
+                            "location": row["location"] or "",
+                            "site": row["site"] or site,
+                            "status": "success",
+                            "duration": job_duration,
+                        }
+                        recent_jobs.append(job_item)
+                        if len(recent_jobs) > 10:
+                            recent_jobs.pop(0)
+
+                        if progress_callback:
+                            elapsed = time.time() - start_time
+                            progress_percent = min(100, round((total_saved / target_total) * 100)) if target_total > 0 else 0
+                            avg_time = elapsed / total_saved if total_saved > 0 else 0
+                            remaining = (target_total - total_saved) * avg_time if avg_time > 0 else 0
+
+                            site_statuses[site]["found"] = site_saved
+
+                            progress_callback({
+                                "session_id": session_id,
+                                "status": "processing",
+                                "search_term": config.search_term,
+                                "location": config.location or "",
+                                "target_jobs": target_total,
+                                "total_jobs": target_total,
+                                "completed_jobs": total_saved,
+                                "successful_jobs": total_saved,
+                                "failed_jobs": total_failed,
+                                "progress_percent": progress_percent,
+                                "elapsed_time": elapsed,
+                                "estimated_remaining": remaining,
+                                "average_job_time": avg_time,
+                                "jobs_per_second": total_saved / elapsed if elapsed > 0 else 0,
+                                "success_rate": 100,
+                                "current_site": site,
+                                "site_statuses": site_statuses,
+                                "current_operation": f"Found: {row['title']} @ {row['company']} ({site_label})",
+                                "current_url": row["job_url"],
+                                "recent_jobs": recent_jobs[-6:],
+                                "warnings": warnings,
+                            })
+
+                        # Subtle pause for smooth real-time stream feel
+                        time.sleep(0.02)
+
+                    except Exception as e:
+                        total_failed += 1
+                        logger.warning(f"Failed to save job {row.get('site')} - {row.get('title')}: {e}")
+                        job_duration = time.time() - job_start
+                        recent_jobs.append({
+                            "id": str(total_saved + total_failed),
+                            "url": row.get("job_url", "unknown"),
+                            "title": row.get("title", "Unknown"),
+                            "company": row.get("company", "Unknown"),
+                            "site": row.get("site") or site,
+                            "status": "failed",
+                            "duration": job_duration
+                        })
+                        if len(recent_jobs) > 10:
+                            recent_jobs.pop(0)
+
+                conn.commit()
+
+            site_statuses[site]["status"] = "completed"
+            site_statuses[site]["found"] = site_saved
+
+        # Final database total update
         with get_db() as conn:
             conn.execute("""
                 UPDATE sessions SET total_jobs = ? WHERE id = ?
-            """, (jobs_saved, session_id))
+            """, (total_saved, session_id))
             conn.commit()
+
+        if total_saved == 0 and warnings and progress_callback:
+            progress_callback({
+                "session_id": session_id,
+                "status": "completed",
+                "target_jobs": target_total,
+                "total_jobs": 0,
+                "completed_jobs": 0,
+                "successful_jobs": 0,
+                "progress_percent": 100,
+                "warnings": warnings or ["No jobs found matching the search criteria"],
+                "current_operation": "Search finished with no listings found.",
+                "site_statuses": site_statuses,
+                "recent_jobs": recent_jobs,
+            })
+
+        return (total_saved, site_statuses, recent_jobs, warnings)
 
     def _save_jobs_to_db(
         self,
@@ -188,6 +405,7 @@ class ScrapingService:
         start_time: float,
         total_jobs: int
     ) -> int:
+        """Saves a dataframe of jobs to the DB and emits progress events."""
         # Normalization
         jobs_df = jobs_df.replace({pd.NaT: None})
         jobs_df = jobs_df.where(pd.notna(jobs_df), None)
@@ -269,10 +487,14 @@ class ScrapingService:
                     recent_jobs.append({
                         "id": str(idx),
                         "url": row["job_url"],
+                        "title": row.get("title", ""),
+                        "company": row.get("company", ""),
+                        "location": row.get("location", ""),
+                        "site": row.get("site", ""),
                         "status": "success",
                         "duration": job_duration
                     })
-                    if len(recent_jobs) > 5:
+                    if len(recent_jobs) > 10:
                         recent_jobs.pop(0)
 
                     if progress_callback and (jobs_saved % 5 == 0 or jobs_saved == total_jobs):
@@ -308,10 +530,12 @@ class ScrapingService:
                     recent_jobs.append({
                         "id": str(idx),
                         "url": row.get("job_url", "unknown"),
+                        "title": row.get("title", "Unknown"),
+                        "company": row.get("company", "Unknown"),
                         "status": "failed",
                         "duration": job_duration
                     })
-                    if len(recent_jobs) > 5:
+                    if len(recent_jobs) > 10:
                         recent_jobs.pop(0)
                     continue
 

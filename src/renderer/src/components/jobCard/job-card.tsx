@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import CardHeader from './CardHeader';
-import JobDetailsDrawer from '@/screens/dashboard/Jobdetailsdrawer';
+import JobDetailsDrawer, { toNormalCase } from '@/screens/dashboard/Jobdetailsdrawer';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Job } from '@/types/job';
 import { ArrowUpRight, MapPin, Banknote, Laptop } from 'lucide-react';
@@ -128,11 +128,11 @@ const JobCard = React.memo(function JobCard({ job, tags }: JobCardProps) {
                   onClick={() => setDrawerOpen(true)}
                   className="text-[15px] font-semibold text-foreground hover:text-primary cursor-pointer line-clamp-1 transition-colors leading-snug"
                 >
-                  {job.title}
+                  {toNormalCase(job.title)}
                 </h3>
               </TooltipTrigger>
               <TooltipContent side="top">
-                <p className="font-medium">{job.title}</p>
+                <p className="font-medium">{toNormalCase(job.title)}</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

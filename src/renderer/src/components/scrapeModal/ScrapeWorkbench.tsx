@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -47,102 +47,146 @@ function ScrapeEditor({
   onSubmit: () => void;
   onClose: () => void;
 }) {
+  // Ensure any draft or custom value is always present in the options list
+  const roleOptions = useMemo(() => {
+    if (
+      formData.search_term &&
+      !SEARCH_TERMS.some((t) => t.value.toLowerCase() === formData.search_term.toLowerCase())
+    ) {
+      return [{ label: formData.search_term, value: formData.search_term }, ...SEARCH_TERMS];
+    }
+    return SEARCH_TERMS;
+  }, [formData.search_term]);
+
+  const locationOptions = useMemo(() => {
+    if (
+      formData.location &&
+      !LOCATIONS.some((l) => l.value.toLowerCase() === formData.location.toLowerCase())
+    ) {
+      return [{ label: formData.location, value: formData.location }, ...LOCATIONS];
+    }
+    return LOCATIONS;
+  }, [formData.location]);
+
+  const selectedRole = roleOptions.find(
+    (t) => t.value.toLowerCase() === (formData.search_term || '').toLowerCase()
+  )?.value;
+
+  const selectedLocation = locationOptions.find(
+    (l) => l.value.toLowerCase() === (formData.location || '').toLowerCase()
+  )?.value;
+
   return (
     <>
-      <DialogHeader className="space-y-2">
-        <DialogTitle className="text-2xl">Launch a focused scrape</DialogTitle>
-        <DialogDescription>
+      <DialogHeader className="space-y-1.5 pb-2">
+        <DialogTitle className="text-2xl font-bold tracking-tight text-foreground">
+          Launch a focused scrape
+        </DialogTitle>
+        <DialogDescription className="text-sm text-muted-foreground">
           Configure the search once, run it now, and optionally save it as a reusable preset.
         </DialogDescription>
       </DialogHeader>
 
-      <div className="space-y-6">
-        <div className="grid gap-6 md:grid-cols-2">
+      <div className="space-y-5 pt-1">
+        {/* Search Term & Location Dropdowns in 2 Columns */}
+        <div className="grid gap-4 md:grid-cols-2">
+          {/* Search Term */}
           <div className="space-y-2">
-            <Label>Search Term *</Label>
+            <Label className="text-sm font-medium text-foreground">Search Term *</Label>
             <Select
               disabled={isScraping}
-              value={formData.search_term}
+              value={selectedRole || undefined}
               onValueChange={(value) => {
                 setFormData((current) => ({ ...current, search_term: value }));
                 setErrors((current) => ({ ...current, search_term: undefined }));
               }}
             >
-              <SelectTrigger className={errors.search_term ? 'border-red-500' : ''}>
+              <SelectTrigger
+                className={`w-full h-11 text-sm bg-background ${
+                  errors.search_term ? 'border-destructive' : 'border-border/80'
+                }`}
+              >
                 <SelectValue placeholder="Select role" />
               </SelectTrigger>
-              <SelectContent>
-                {SEARCH_TERMS.map((term) => (
-                  <SelectItem key={term.value} value={term.value}>
+              <SelectContent className="max-h-64">
+                {roleOptions.map((term) => (
+                  <SelectItem key={term.value} value={term.value} className="text-sm py-2">
                     {term.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {errors.search_term && <p className="text-sm text-red-500">{errors.search_term}</p>}
+            {errors.search_term && <p className="text-xs text-destructive">{errors.search_term}</p>}
           </div>
 
+          {/* Location */}
           <div className="space-y-2">
-            <Label>Location *</Label>
+            <Label className="text-sm font-medium text-foreground">Location *</Label>
             <Select
               disabled={isScraping}
-              value={formData.location}
+              value={selectedLocation || undefined}
               onValueChange={(value) => {
                 setFormData((current) => ({ ...current, location: value }));
                 setErrors((current) => ({ ...current, location: undefined }));
               }}
             >
-              <SelectTrigger className={errors.location ? 'border-red-500' : ''}>
+              <SelectTrigger
+                className={`w-full h-11 text-sm bg-background ${
+                  errors.location ? 'border-destructive' : 'border-border/80'
+                }`}
+              >
                 <SelectValue placeholder="Select city" />
               </SelectTrigger>
-              <SelectContent>
-                {LOCATIONS.map((location) => (
-                  <SelectItem key={location.value} value={location.value}>
+              <SelectContent className="max-h-64">
+                {locationOptions.map((location) => (
+                  <SelectItem key={location.value} value={location.value} className="text-sm py-2">
                     {location.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {errors.location && <p className="text-sm text-red-500">{errors.location}</p>}
+            {errors.location && <p className="text-xs text-destructive">{errors.location}</p>}
           </div>
         </div>
 
+        {/* Sites Selection */}
         <div className="space-y-2">
-          <Label>Sites *</Label>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <Label className="text-sm font-medium text-foreground">Sites *</Label>
+          <div className="grid grid-cols-3 gap-3">
             {SITES.map((site) => {
-              const active = formData.sites.includes(site.value);
+              const isSelected = formData.sites.includes(site.value);
 
               return (
                 <button
                   key={site.value}
                   type="button"
                   disabled={isScraping}
-                  className={`flex items-center gap-3 rounded-2xl border px-3 py-3 text-left transition ${
-                    active
-                      ? 'border-primary bg-primary/8 text-foreground shadow-sm'
-                      : 'border-border/70 bg-muted/20 text-muted-foreground'
-                  }`}
                   onClick={() => toggleSite(site.value)}
+                  className={`flex items-center gap-3 rounded-xl border p-3.5 text-left transition-all cursor-pointer ${
+                    isSelected
+                      ? 'border-primary bg-primary/10 text-foreground font-semibold shadow-xs ring-1 ring-primary/20'
+                      : 'border-border/70 bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+                  }`}
                 >
-                  <Checkbox checked={active} />
+                  <Checkbox checked={isSelected} className="pointer-events-none" />
                   <span className="text-sm font-medium">{site.label}</span>
                 </button>
               );
             })}
           </div>
-          {errors.sites && <p className="text-sm text-red-500">{errors.sites}</p>}
+          {errors.sites && <p className="text-xs text-destructive">{errors.sites}</p>}
         </div>
 
+        {/* Results Wanted */}
         <div className="space-y-3 rounded-2xl border border-border/70 bg-muted/20 p-4">
           <div className="flex items-center justify-between gap-4">
-            <div>
-              <Label>Results Wanted</Label>
+            <div className="space-y-0.5">
+              <Label className="text-sm font-semibold text-foreground">Results Wanted</Label>
               <p className="text-xs text-muted-foreground">
                 Keep the scrape focused or widen it depending on the run.
               </p>
             </div>
-            <span className="rounded-full border border-border/70 px-3 py-1 text-sm font-medium">
+            <span className="rounded-lg border border-border/70 bg-background px-3 py-1 text-sm font-bold tabular-nums text-foreground">
               {formData.results_wanted}
             </span>
           </div>
@@ -157,13 +201,16 @@ function ScrapeEditor({
               setFormData((current) => ({ ...current, results_wanted: value }));
               setErrors((current) => ({ ...current, results_wanted: undefined }));
             }}
+            className="py-1"
           />
-          {errors.results_wanted && <p className="text-sm text-red-500">{errors.results_wanted}</p>}
+          {errors.results_wanted && <p className="text-xs text-destructive">{errors.results_wanted}</p>}
         </div>
 
-        <div className="space-y-4 rounded-2xl border border-border/70 bg-muted/20 p-4">
+        {/* Save as preset */}
+        <div className="rounded-2xl border border-border/70 bg-muted/20 p-4 space-y-3">
           <div className="flex items-start gap-3">
             <Checkbox
+              id="save-preset"
               disabled={isScraping}
               checked={formData.save_as_preset}
               onCheckedChange={(checked) => {
@@ -171,13 +218,18 @@ function ScrapeEditor({
                 setFormData((current) => ({
                   ...current,
                   save_as_preset: nextValue,
-                  preset_name: nextValue ? current.preset_name : '',
+                  preset_name: nextValue
+                    ? (current.preset_name || (current.search_term ? `${current.search_term} (${current.location || 'Any'})` : ''))
+                    : '',
                 }));
                 setErrors((current) => ({ ...current, preset_name: undefined }));
               }}
+              className="mt-0.5"
             />
-            <div className="space-y-1">
-              <p className="text-sm font-medium">Save as preset</p>
+            <div className="space-y-0.5 flex-1">
+              <label htmlFor="save-preset" className="text-sm font-medium text-foreground cursor-pointer block">
+                Save as preset
+              </label>
               <p className="text-xs text-muted-foreground">
                 Reuse this setup later from Presets and Search.
               </p>
@@ -185,8 +237,8 @@ function ScrapeEditor({
           </div>
 
           {formData.save_as_preset && (
-            <div className="space-y-2">
-              <Label>Preset name</Label>
+            <div className="pt-2 border-t border-border/50 space-y-1.5 animate-in fade-in-50 duration-200">
+              <Label className="text-xs font-medium text-foreground/80">Preset name</Label>
               <Input
                 disabled={isScraping}
                 value={formData.preset_name}
@@ -194,18 +246,25 @@ function ScrapeEditor({
                   setFormData((current) => ({ ...current, preset_name: event.target.value }));
                   setErrors((current) => ({ ...current, preset_name: undefined }));
                 }}
-                placeholder="Remote product roles"
+                placeholder="e.g. Remote product roles"
+                className={`h-10 text-sm bg-background ${errors.preset_name ? 'border-destructive' : ''}`}
+                autoFocus
               />
-              {errors.preset_name && <p className="text-sm text-red-500">{errors.preset_name}</p>}
+              {errors.preset_name && <p className="text-xs text-destructive">{errors.preset_name}</p>}
             </div>
           )}
         </div>
 
-        <div className="flex justify-end gap-3 pt-2">
-          <Button variant="outline" onClick={onClose} disabled={isScraping}>
+        {/* Actions */}
+        <div className="flex items-center justify-end gap-3 pt-2">
+          <Button variant="outline" onClick={onClose} disabled={isScraping} className="h-10 px-5 text-sm cursor-pointer">
             Cancel
           </Button>
-          <Button onClick={onSubmit} disabled={isScraping} className="min-w-36">
+          <Button
+            onClick={onSubmit}
+            disabled={isScraping}
+            className="h-10 min-w-36 text-sm font-medium cursor-pointer shadow-sm transition-all"
+          >
             {isScraping ? 'Scraping...' : 'Start Scrape'}
           </Button>
         </div>
@@ -242,8 +301,17 @@ export default function ScrapeWorkbench({
   const { refreshDashboard } = useDashboard();
   const [sessionId, setSessionId] = useState<string | null>(null);
 
+  // Track initialization to avoid wiping user selections
+  const initializedForOpenRef = useRef(false);
+
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      initializedForOpenRef.current = false;
+      return;
+    }
+
+    if (initializedForOpenRef.current) return;
+    initializedForOpenRef.current = true;
 
     if (draft) {
       applyDraft(draft);
@@ -251,24 +319,20 @@ export default function ScrapeWorkbench({
       return;
     }
 
-    if (!baseUrl) {
-      applyDraft();
-      return;
-    }
+    if (!baseUrl) return;
 
     fetchAppSettings(baseUrl)
       .then((settings) => {
-        applyDraft({
-          location: settings.default_location,
-          results_wanted: settings.default_results_wanted,
-          country_indeed: settings.default_country_indeed,
-          sites: settings.default_sites,
-        });
+        setFormData((prev) => ({
+          ...prev,
+          location: prev.location || settings.default_location || '',
+          results_wanted: prev.results_wanted || settings.default_results_wanted || 20,
+          country_indeed: prev.country_indeed || settings.default_country_indeed || 'india',
+          sites: prev.sites.length > 0 ? prev.sites : (settings.default_sites && settings.default_sites.length > 0 ? settings.default_sites : ['linkedin', 'indeed']),
+        }));
       })
-      .catch(() => {
-        applyDraft();
-      });
-  }, [applyDraft, baseUrl, draft, onDraftConsumed, open]);
+      .catch(() => {});
+  }, [open, draft, baseUrl, applyDraft, onDraftConsumed, setFormData]);
 
   const handleSubmit = async () => {
     if (!validateForm()) return;
@@ -299,6 +363,7 @@ export default function ScrapeWorkbench({
 
   const handleCancel = async () => {
     if (!sessionId) return;
+    setIsScraping(false);
 
     try {
       await fetch(`${baseUrl}/api/scrape/cancel/${sessionId}`, {
@@ -307,6 +372,11 @@ export default function ScrapeWorkbench({
     } catch (error) {
       console.error('Cancel error:', error);
     }
+  };
+
+  const handleReset = () => {
+    setSessionId(null);
+    setIsScraping(false);
   };
 
   const handleComplete = async () => {
@@ -318,16 +388,15 @@ export default function ScrapeWorkbench({
   };
 
   const handleDialogClose = () => {
-    if (isScraping) return;
-
     setSessionId(null);
+    setIsScraping(false);
     resetForm();
     onClose();
   };
 
   return (
     <Dialog open={open} onOpenChange={handleDialogClose}>
-      <DialogContent className="max-w-3xl border-border/70 bg-card/95 backdrop-blur-sm">
+      <DialogContent className="max-w-xl max-h-[92vh] overflow-hidden flex flex-col border-border/70 bg-card p-6 shadow-2xl sm:rounded-3xl">
         {!sessionId ? (
           <ScrapeEditor
             formData={formData}
@@ -343,8 +412,16 @@ export default function ScrapeWorkbench({
           <ScrapeProgress
             sessionId={sessionId}
             baseUrl={baseUrl}
+            initialQuery={{
+              search_term: formData.search_term,
+              location: formData.location,
+              target_jobs: formData.results_wanted,
+              sites: formData.sites,
+            }}
             onCancel={handleCancel}
             onComplete={handleComplete}
+            onReset={handleReset}
+            onClose={handleDialogClose}
           />
         )}
       </DialogContent>

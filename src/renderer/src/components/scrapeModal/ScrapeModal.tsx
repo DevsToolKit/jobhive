@@ -60,6 +60,7 @@ export default function ScrapeModal({ open, onClose }: { open: boolean; onClose:
     if (!sessionId) return;
 
     console.log('⏸️  Cancelling scrape session:', sessionId);
+    setIsScraping(false);
 
     try {
       await fetch(`${baseUrl}/api/scrape/cancel/${sessionId}`, {
@@ -69,6 +70,11 @@ export default function ScrapeModal({ open, onClose }: { open: boolean; onClose:
     } catch (error) {
       console.error('❌ Cancel error:', error);
     }
+  };
+
+  const handleReset = () => {
+    setSessionId(null);
+    setIsScraping(false);
   };
 
   const handleComplete = async () => {
@@ -86,14 +92,18 @@ export default function ScrapeModal({ open, onClose }: { open: boolean; onClose:
     onClose();
   };
 
-  const handleDialogClose = () => {
-    // Only close if not scraping
-    if (!isScraping) {
-      console.log('🚪 Dialog closed by user');
-      setSessionId(null);
-      onClose();
-    } else {
-      console.log('⚠️  Cannot close dialog while scraping is in progress');
+  const handleClose = () => {
+    setSessionId(null);
+    setIsScraping(false);
+    onClose();
+  };
+
+  const handleDialogClose = (newOpen: boolean) => {
+    if (!newOpen) {
+      if (sessionId && isScraping) {
+        handleCancel();
+      }
+      handleClose();
     }
   };
 
@@ -115,8 +125,16 @@ export default function ScrapeModal({ open, onClose }: { open: boolean; onClose:
           <ScrapeProgress
             sessionId={sessionId}
             baseUrl={baseUrl}
+            initialQuery={{
+              search_term: formData.search_term,
+              location: formData.location,
+              target_jobs: formData.results_wanted,
+              sites: formData.site_name,
+            }}
             onCancel={handleCancel}
             onComplete={handleComplete}
+            onReset={handleReset}
+            onClose={handleClose}
           />
         )}
       </DialogContent>

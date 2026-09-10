@@ -81,7 +81,7 @@ function App() {
             path="history"
             element={
               <Suspense fallback={<RouteLoadingFallback />}>
-                <HistoryScreen />
+                <HistoryScreen onNewScrape={() => handleRequestNewScrape()} />
               </Suspense>
             }
           />

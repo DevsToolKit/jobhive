@@ -375,3 +375,63 @@ def test_scraping_service_tracks_status_during_start_and_cancel(temp_db, monkeyp
     service.active_sessions["cancel-me"] = {"status": "running", "progress": 10}
     assert service.cancel_scrape("cancel-me") is True
     assert service.get_session_status("cancel-me")["status"] == "cancelled"
+
+
+def test_scraping_service_progressive_and_target_capping(temp_db, monkeypatch):
+    service = ScrapingService()
+    events = []
+
+    def mock_scrape_jobs(**kwargs):
+        site = kwargs.get("site_name")
+        return pd.DataFrame([
+            {
+                "site": site,
+                "title": f"{site.capitalize()} Dev 1",
+                "company": f"Company {site} 1",
+                "job_url": f"https://example.com/{site}/1",
+                "location": "Remote",
+                "description": "Clean description",
+            },
+            {
+                "site": site,
+                "title": f"{site.capitalize()} Dev 2",
+                "company": f"Company {site} 2",
+                "job_url": f"https://example.com/{site}/2",
+                "location": "Remote",
+                "description": "Clean description",
+            },
+        ])
+
+    monkeypatch.setattr("services.scraping_service.scrape_jobs", mock_scrape_jobs)
+
+    config = ScrapeConfig(
+        search_term="Frontend Lead",
+        location="Remote",
+        sites=[JobSite.LINKEDIN, JobSite.INDEED],
+        results_wanted=3, # Target is 3, while 2 sites x 2 = 4 would be returned
+        country_indeed="usa",
+    )
+
+    session_id = "test-progressive-session"
+    service.start_scrape(config, session_id, events.append)
+
+    # Verify capped at 3
+    with get_db() as conn:
+        saved_rows = conn.execute("SELECT COUNT(*) as cnt FROM jobs WHERE session_id = ?", (session_id,)).fetchone()
+        assert saved_rows["cnt"] == 3
+
+    # Verify events contain enriched metadata
+    assert len(events) >= 3
+    first_event = events[0]
+    assert first_event["target_jobs"] == 3
+    assert first_event["search_term"] == "Frontend Lead"
+    assert "site_statuses" in first_event
+    assert "linkedin" in first_event["site_statuses"]
+
+    # Verify completed event reflects total 3
+    last_event = events[-1]
+    assert last_event["status"] == "completed"
+    assert last_event["total_jobs"] == 3
+    assert last_event["successful_jobs"] == 3
+    assert last_event["progress_percent"] == 100
+
