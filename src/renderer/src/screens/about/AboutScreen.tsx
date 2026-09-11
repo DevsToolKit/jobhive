@@ -113,7 +113,7 @@ export default function AboutScreen() {
             />
             <div className="space-y-1">
               <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
                   {APP_CONFIG.name}
                 </h1>
                 <span className="text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded-md border border-border/60">

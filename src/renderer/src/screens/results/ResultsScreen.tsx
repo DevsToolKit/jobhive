@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useBackend } from '@/hooks/useBaseUrl';
 import DashboardJobsGrid from '@/screens/dashboard/DashboardJobsGrid';
 import type { Job } from '@/types/job';
@@ -54,18 +53,30 @@ export default function ResultsScreen() {
   }
 
   return (
-    <section className="space-y-6 px-6 py-4">
-      <Card className="border-border/70 bg-card/90">
-        <CardHeader>
-          <CardTitle className="text-3xl">{session.search_term}</CardTitle>
-          <CardDescription>
-            {session.location} · {session.total_jobs} jobs · {session.status}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          Review a prior scrape session and open jobs directly from the saved results.
-        </CardContent>
-      </Card>
+    <section className="px-6 py-3 flex flex-col gap-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3.5 border-b border-border/50">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-xl font-semibold tracking-tight text-foreground capitalize">
+              {session.search_term}
+            </h1>
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium bg-muted text-muted-foreground border border-border/50">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              {jobs.length} {jobs.length === 1 ? 'job' : 'jobs'}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+            {session.location && (
+              <>
+                <span className="capitalize">{session.location}</span>
+                <span className="text-muted-foreground/40">·</span>
+              </>
+            )}
+            <span>Status: <span className="capitalize font-medium text-foreground">{session.status}</span></span>
+          </div>
+        </div>
+      </div>
 
       <DashboardJobsGrid jobs={jobs} />
     </section>

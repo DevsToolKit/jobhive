@@ -139,7 +139,7 @@ export default function PresetsScreen({
       {/* Header Section */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border/50 pb-4">
         <div className="space-y-1">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
             Saved Presets
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
@@ -325,23 +325,24 @@ export default function PresetsScreen({
                               >
                                 {preset.name}
                               </h3>
-                              <span className="text-[11px] text-muted-foreground font-mono block">
-                                ID: {preset.id.slice(0, 8)}
+                              <span className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                                <Clock3 className="h-3 w-3 shrink-0 text-muted-foreground/60" />
+                                <span>{formatLastUsed(preset.last_used)}</span>
                               </span>
                             </div>
                           </div>
 
-                          <span className="inline-flex items-center shrink-0 rounded-full border border-border/60 bg-muted/40 px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-                            {preset.use_count} {preset.use_count === 1 ? 'use' : 'uses'}
+                          <span className="inline-flex items-center shrink-0 rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                            {preset.use_count} {preset.use_count === 1 ? 'run' : 'runs'}
                           </span>
                         </div>
 
                         {/* Search Term & Location */}
-                        <div className="space-y-1.5 pt-1 text-xs">
-                          <div className="flex items-center gap-1.5 text-foreground/90 capitalize truncate">
-                            <span className="font-medium">{preset.search_term}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-muted-foreground text-[11px] capitalize truncate">
+                        <div className="flex items-center justify-between gap-2 pt-1 text-xs border-t border-border/40">
+                          <span className="font-medium text-foreground/90 capitalize truncate">
+                            {preset.search_term}
+                          </span>
+                          <span className="text-muted-foreground text-[11px] capitalize truncate flex items-center gap-1 shrink-0">
                             {preset.location ? (
                               <>
                                 <MapPin className="h-3 w-3 shrink-0" />
@@ -350,16 +351,10 @@ export default function PresetsScreen({
                             ) : (
                               <>
                                 <Globe className="h-3 w-3 shrink-0" />
-                                <span>Anywhere / Remote</span>
+                                <span>Remote</span>
                               </>
                             )}
-                          </div>
-                        </div>
-
-                        {/* Last used timestamp */}
-                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground pt-0.5">
-                          <Clock3 className="h-3 w-3 shrink-0" />
-                          <span>Last used: {formatLastUsed(preset.last_used)}</span>
+                          </span>
                         </div>
                       </div>
 

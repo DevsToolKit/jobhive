@@ -196,7 +196,7 @@ export default function HistoryScreen({ onNewScrape }: HistoryScreenProps) {
       {/* Header Section */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border/50 pb-4">
         <div className="space-y-1">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
             Job Scrape History
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">

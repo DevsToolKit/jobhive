@@ -134,22 +134,22 @@ export function HistoryTable({
         <Table>
           <TableHeader className="bg-muted/40 border-b border-border/60">
             <TableRow className="hover:bg-transparent">
-              <TableHead className="py-3 px-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-[32%]">
+              <TableHead className="py-3 px-4 text-xs font-medium text-muted-foreground w-[32%]">
                 Search Query
               </TableHead>
-              <TableHead className="py-3 px-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-[20%]">
+              <TableHead className="py-3 px-4 text-xs font-medium text-muted-foreground w-[20%]">
                 Location
               </TableHead>
-              <TableHead className="py-3 px-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <TableHead className="py-3 px-4 text-xs font-medium text-muted-foreground">
                 Status
               </TableHead>
-              <TableHead className="py-3 px-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <TableHead className="py-3 px-4 text-xs font-medium text-muted-foreground">
                 Jobs Found
               </TableHead>
-              <TableHead className="py-3 px-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <TableHead className="py-3 px-4 text-xs font-medium text-muted-foreground">
                 Date & Time
               </TableHead>
-              <TableHead className="py-3 px-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">
+              <TableHead className="py-3 px-4 text-xs font-medium text-muted-foreground text-right">
                 Actions
               </TableHead>
             </TableRow>
@@ -177,9 +177,6 @@ export function HistoryTable({
                           className="font-medium text-sm text-foreground hover:text-primary transition-colors cursor-pointer capitalize line-clamp-1 block"
                         >
                           {session.search_term}
-                        </span>
-                        <span className="text-[11px] text-muted-foreground font-mono block">
-                          {session.id.slice(0, 8)}
                         </span>
                       </div>
                     </div>

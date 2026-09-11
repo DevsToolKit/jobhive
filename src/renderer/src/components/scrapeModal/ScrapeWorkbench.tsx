@@ -79,10 +79,10 @@ function ScrapeEditor({
   return (
     <>
       <DialogHeader className="space-y-1.5 pb-2">
-        <DialogTitle className="text-2xl font-bold tracking-tight text-foreground">
+        <DialogTitle className="text-xl font-semibold tracking-tight text-foreground">
           Launch a focused scrape
         </DialogTitle>
-        <DialogDescription className="text-sm text-muted-foreground">
+        <DialogDescription className="text-xs sm:text-sm text-muted-foreground">
           Configure the search once, run it now, and optionally save it as a reusable preset.
         </DialogDescription>
       </DialogHeader>

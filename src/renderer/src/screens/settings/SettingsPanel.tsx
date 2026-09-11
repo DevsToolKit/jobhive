@@ -356,8 +356,8 @@ export default function SettingsPanel() {
         <header className="space-y-4 border-b border-border/50 pb-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="space-y-1.5">
-              <h1 className="text-3xl font-bold tracking-tight text-foreground">Settings</h1>
-              <p className="text-sm leading-relaxed text-muted-foreground">
+              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">Settings</h1>
+              <p className="text-xs sm:text-sm leading-relaxed text-muted-foreground">
                 Configure application appearance, scraper search defaults, update policies, and
                 runtime services.
               </p>
@@ -385,8 +385,8 @@ export default function SettingsPanel() {
                 <Settings2 className="h-5 w-5" />
               </div>
               <div>
-                <CardTitle className="text-xl">Workspace preferences</CardTitle>
-                <CardDescription className="text-sm">
+                <CardTitle className="text-base font-semibold text-foreground">Workspace preferences</CardTitle>
+                <CardDescription className="text-xs sm:text-sm">
                   Set the visual tone and the defaults the app should use for a fresh scrape.
                 </CardDescription>
               </div>
@@ -547,8 +547,8 @@ export default function SettingsPanel() {
                 <Download className="h-5 w-5" />
               </div>
               <div>
-                <CardTitle className="text-xl">Release management</CardTitle>
-                <CardDescription className="text-sm">
+                <CardTitle className="text-base font-semibold text-foreground">Release management</CardTitle>
+                <CardDescription className="text-xs sm:text-sm">
                   Decide how updates are checked, downloaded, and installed.
                 </CardDescription>
               </div>
@@ -642,8 +642,8 @@ export default function SettingsPanel() {
                 <ServerCog className="h-5 w-5" />
               </div>
               <div>
-                <CardTitle className="text-xl">Backend and runtime</CardTitle>
-                <CardDescription className="text-sm">
+                <CardTitle className="text-base font-semibold text-foreground">Backend and runtime</CardTitle>
+                <CardDescription className="text-xs sm:text-sm">
                   Monitor service health, connectivity, and install details without leaving the app.
                 </CardDescription>
               </div>

@@ -169,6 +169,39 @@ body {
   ::selection {
     @apply bg-primary text-primary-foreground;
   }
+
+  /* Universal pointer cursor for all interactive elements across the application */
+  button,
+  [role="button"],
+  [type="button"],
+  [type="submit"],
+  [type="reset"],
+  a,
+  select,
+  summary,
+  input[type="checkbox"],
+  input[type="radio"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="option"],
+  [role="switch"],
+  [data-slot="button"],
+  [data-slot="sidebar-menu-button"],
+  [data-slot="dropdown-menu-item"],
+  [data-slot="dropdown-menu-checkbox-item"],
+  [data-slot="dropdown-menu-radio-item"],
+  [data-slot="select-item"],
+  [data-slot="select-trigger"],
+  [data-slot="tabs-trigger"],
+  [data-slot="checkbox"] {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [role="button"][aria-disabled="true"],
+  [disabled] {
+    cursor: not-allowed;
+  }
 }
 
 .app-drag {
