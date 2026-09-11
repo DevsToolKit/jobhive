@@ -1,144 +1,374 @@
 import { useEffect, useState } from 'react';
 import {
   ArrowUpRight,
-  Boxes,
-  CheckCircle2,
-  Layers3,
-  ShieldCheck,
-  Sparkles,
-  Workflow,
+  Bug,
+  Check,
+  Copy,
+  Github,
+  Mail,
+  RefreshCw,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
+import appLogo from '@/assets/logo.png';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { APP_CONFIG } from '@/config/app';
 
-const ICONS = [Sparkles, ShieldCheck, CheckCircle2] as const;
-const STACK_ICONS = [Layers3, Workflow, Boxes] as const;
+interface AppInfoState {
+  name: string;
+  version: string;
+  isPackaged: boolean;
+  platform: string;
+  logsPath: string;
+  userDataPath: string;
+}
 
 export default function AboutScreen() {
-  const [version, setVersion] = useState('Loading...');
+  const [appInfo, setAppInfo] = useState<AppInfoState>({
+    name: APP_CONFIG.name,
+    version: '1.0.2',
+    isPackaged: false,
+    platform: typeof navigator !== 'undefined' ? navigator.platform : '',
+    logsPath: '',
+    userDataPath: '',
+  });
+
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    window.app
-      .getAppInfo()
-      .then((info) => setVersion(info.version))
-      .catch(() => setVersion('Unknown'));
+    if (window.app?.getAppInfo) {
+      window.app
+        .getAppInfo()
+        .then((info) => setAppInfo(info))
+        .catch(() => {});
+    }
   }, []);
 
+  const handleCheckForUpdates = async () => {
+    if (!window.app?.check_for_updates) {
+      toast.info('Update checking is available in packaged builds.');
+      return;
+    }
+
+    try {
+      setCheckingUpdate(true);
+      setUpdateMessage('Checking for updates...');
+      const result = await window.app.check_for_updates();
+
+      if (result.updateAvailable) {
+        setUpdateMessage(`Version ${result.downloadedVersion || 'latest'} available`);
+        toast.success('A new version is available for download.');
+      } else {
+        setUpdateMessage(`JobHive is up to date (v${appInfo.version})`);
+        toast.info(`You are running the latest version.`);
+      }
+    } catch {
+      setUpdateMessage('Unable to reach update server');
+      toast.error('Failed to check for updates.');
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
+  const handleCopyDiagnostics = async () => {
+    const specs = [
+      `JobHive: v${appInfo.version} (${appInfo.isPackaged ? 'Production' : 'Development'})`,
+      `Platform: ${appInfo.platform || navigator.platform}`,
+      `User Agent: ${navigator.userAgent}`,
+      `Logs: ${appInfo.logsPath || 'N/A'}`,
+      `UserData: ${appInfo.userDataPath || 'N/A'}`,
+      `Date: ${new Date().toISOString()}`,
+    ].join('\n');
+
+    try {
+      await navigator.clipboard.writeText(specs);
+      setCopied(true);
+      toast.success('System diagnostics copied to clipboard');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error('Failed to copy to clipboard');
+    }
+  };
+
+  const getPlatformLabel = () => {
+    const p = appInfo.platform.toLowerCase();
+    if (p.includes('darwin') || p.includes('mac')) return 'macOS';
+    if (p.includes('win')) return 'Windows';
+    if (p.includes('linux')) return 'Linux';
+    return appInfo.platform || 'Desktop';
+  };
+
   return (
-    <section className="space-y-6 px-6 py-6">
-      <div className="rounded-[30px] border border-border/70 bg-muted/20 px-6 py-6 md:px-8 md:py-8">
-        <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr] xl:items-end">
-          <div className="space-y-3">
-            <div className="inline-flex items-center rounded-full border border-border/70 bg-background/80 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.22em] text-muted-foreground">
-              About {APP_CONFIG.name}
+    <div className="w-full max-w-3xl mx-auto px-6 py-12 md:py-16 space-y-12">
+      {/* Product Hero Header - Open & Cardless */}
+      <div className="space-y-6">
+        <div className="flex items-start justify-between gap-6">
+          <div className="flex items-center gap-5">
+            <img
+              src={appLogo}
+              alt="JobHive Logo"
+              className="h-16 w-16 object-contain rounded-2xl drop-shadow-sm select-none"
+            />
+            <div className="space-y-1">
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                  {APP_CONFIG.name}
+                </h1>
+                <span className="text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded-md border border-border/60">
+                  v{appInfo.version}
+                </span>
+                <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                  ● {appInfo.isPackaged ? 'Stable Release' : 'Dev Build'}
+                </span>
+              </div>
+              <p className="text-sm text-muted-foreground font-medium">
+                {APP_CONFIG.tagline}
+              </p>
             </div>
-            <h1 className="max-w-3xl text-3xl font-semibold tracking-tight md:text-4xl">{APP_CONFIG.tagline}</h1>
-            <p className="max-w-2xl text-sm leading-7 text-muted-foreground md:text-base">
-              {APP_CONFIG.description}
+          </div>
+
+          {/* External Links */}
+          <div className="hidden sm:flex items-center gap-2 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.app?.openExternalUrl(APP_CONFIG.repository.url)}
+              className="h-8 gap-1.5 text-xs font-medium cursor-pointer"
+            >
+              <Github className="h-3.5 w-3.5" />
+              <span>GitHub</span>
+              <ArrowUpRight className="h-3 w-3 opacity-60" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.app?.openExternalUrl(`${APP_CONFIG.repository.url}/issues`)}
+              className="h-8 gap-1.5 text-xs font-medium cursor-pointer"
+            >
+              <Bug className="h-3.5 w-3.5" />
+              <span>Issues</span>
+            </Button>
+          </div>
+        </div>
+
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          JobHive is a local-first desktop workspace built for focused job market discovery.
+          It concurrently queries top job platforms—including LinkedIn, Indeed, Glassdoor, and
+          Google Jobs—normalizing unstructured postings into a unified schema without cloud
+          tracking, accounts, or browser tab overload.
+        </p>
+
+        {/* Action Controls */}
+        <div className="flex flex-wrap items-center gap-3 pt-2">
+          <Button
+            size="sm"
+            onClick={handleCheckForUpdates}
+            disabled={checkingUpdate}
+            className="h-8.5 gap-2 text-xs font-medium cursor-pointer"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${checkingUpdate ? 'animate-spin' : ''}`} />
+            <span>{checkingUpdate ? 'Checking...' : 'Check for Updates'}</span>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleCopyDiagnostics}
+            className="h-8.5 gap-2 text-xs font-medium cursor-pointer"
+          >
+            {copied ? (
+              <>
+                <Check className="h-3.5 w-3.5 text-emerald-500" />
+                <span>Copied</span>
+              </>
+            ) : (
+              <>
+                <Copy className="h-3.5 w-3.5" />
+                <span>Copy System Diagnostics</span>
+              </>
+            )}
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => window.app?.openExternalUrl(`mailto:${APP_CONFIG.supportEmail}`)}
+            className="h-8.5 gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer"
+          >
+            <Mail className="h-3.5 w-3.5" />
+            <span>Support</span>
+          </Button>
+
+          {updateMessage && (
+            <span className="text-xs text-muted-foreground font-medium pl-1">
+              {updateMessage}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Philosophy & Architecture - Clean Narrative */}
+      <div className="space-y-4 pt-4 border-t border-border/50">
+        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          Architecture & Principles
+        </h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 text-sm">
+          <div className="space-y-1.5">
+            <h3 className="font-semibold text-foreground text-[14px]">
+              Local-First & Private
+            </h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Search history, saved presets, and extracted job cards remain exclusively
+              on your local machine. There are no remote telemetry trackers, user tracking
+              beacons, or cloud databases.
             </p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-            <div className="rounded-2xl border border-border/70 bg-background/85 p-4">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Version</p>
-              <p className="mt-2 text-lg font-semibold">{version}</p>
-            </div>
-            <div className="rounded-2xl border border-border/70 bg-background/85 p-4">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Owner</p>
-              <p className="mt-2 text-lg font-semibold">{APP_CONFIG.company}</p>
-            </div>
-            <div className="rounded-2xl border border-border/70 bg-background/85 p-4">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Support</p>
-              <p className="mt-2 text-sm font-medium">{APP_CONFIG.supportEmail}</p>
-            </div>
+          <div className="space-y-1.5">
+            <h3 className="font-semibold text-foreground text-[14px]">
+              Multi-Platform Aggregation
+            </h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              JobHive runs parallel extractions against LinkedIn, Indeed, Glassdoor, and
+              Google Jobs, performing real-time deduplication and cleaning compensation,
+              location, and role metadata.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <h3 className="font-semibold text-foreground text-[14px]">
+              Repeatable Search Presets
+            </h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Save multi-site query configurations with location filters and target roles
+              to execute automated sweeps in a single click without repetitive form entry.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <h3 className="font-semibold text-foreground text-[14px]">
+              Structured Exports
+            </h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Instantly export any scrape session into clean CSV or JSON format, optimized
+              for Google Sheets, personal ATS trackers, or custom analysis pipelines.
+            </p>
           </div>
         </div>
       </div>
 
-      <Card className="border-border/70 bg-card shadow-[0_20px_45px_-36px_rgba(15,23,42,0.25)]">
-        <CardHeader>
-          <CardTitle>Why the product exists</CardTitle>
-          <CardDescription>
-            Built for teams that want repeatable job discovery without juggling tabs, scripts, and manual reruns.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-3">
-          {APP_CONFIG.aboutHighlights.map((highlight, index) => {
-            const Icon = ICONS[index] ?? CheckCircle2;
+      {/* System Specifications Table - Clean Line Items */}
+      <div className="space-y-3 pt-4 border-t border-border/50">
+        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          System Specifications
+        </h2>
 
-            return (
-              <div key={highlight} className="rounded-2xl border border-border/70 bg-muted/20 p-5">
-                <Icon className="mb-4 h-5 w-5 text-primary" />
-                <p className="text-sm leading-6 text-muted-foreground">{highlight}</p>
-              </div>
-            );
-          })}
-        </CardContent>
-      </Card>
+        <div className="divide-y divide-border/40 text-xs">
+          <div className="py-2.5 flex items-center justify-between">
+            <span className="text-muted-foreground font-medium">Application Version</span>
+            <span className="font-mono font-medium text-foreground">
+              {appInfo.version} ({appInfo.isPackaged ? 'Packaged' : 'Unpackaged Dev'})
+            </span>
+          </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-        <Card className="border-border/70 bg-card shadow-[0_20px_45px_-36px_rgba(15,23,42,0.25)]">
-          <CardHeader>
-            <CardTitle>What ships with the desktop app</CardTitle>
-            <CardDescription>The app is meant to feel operational on first launch, not dependent on local setup.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {[
-              'A bundled backend runtime so users do not need to install separate developer tooling.',
-              'Preset-driven job searches so useful queries can be rerun consistently across sessions.',
-              'Desktop-native updates and runtime diagnostics so the app is easier to maintain in production.',
-            ].map((item, index) => {
-              const Icon = STACK_ICONS[index] ?? Layers3;
+          <div className="py-2.5 flex items-center justify-between">
+            <span className="text-muted-foreground font-medium">Host Platform</span>
+            <span className="text-foreground font-medium">
+              {getPlatformLabel()} ({appInfo.platform || 'unknown'})
+            </span>
+          </div>
 
-              return (
-                <div key={item} className="flex items-start gap-4 rounded-2xl border border-border/70 bg-background/80 p-4">
-                  <div className="rounded-2xl border border-border/70 bg-muted/30 p-3">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <p className="text-sm leading-6 text-muted-foreground">{item}</p>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
+          <div className="py-2.5 flex items-center justify-between">
+            <span className="text-muted-foreground font-medium">Core Stack</span>
+            <span className="text-foreground font-medium">
+              Electron 40 · React 19 · Vite · Python 3
+            </span>
+          </div>
 
-        <Card className="border-border/70 bg-card shadow-[0_20px_45px_-36px_rgba(15,23,42,0.25)]">
-          <CardHeader>
-            <CardTitle>Project reference</CardTitle>
-            <CardDescription>Essential ownership and access details for the product.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5 text-sm">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Product</p>
-                <p className="mt-2 font-medium">{APP_CONFIG.name}</p>
-              </div>
-              <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Maintainer</p>
-                <p className="mt-2 font-medium">{APP_CONFIG.company}</p>
-              </div>
+          <div className="py-2.5 flex items-center justify-between">
+            <span className="text-muted-foreground font-medium">Storage Engine</span>
+            <span className="text-foreground font-medium">
+              Local SQLite (Direct File I/O)
+            </span>
+          </div>
+
+          {appInfo.logsPath && (
+            <div className="py-2.5 flex items-center justify-between gap-4">
+              <span className="text-muted-foreground font-medium shrink-0">Logs Directory</span>
+              <span
+                className="font-mono text-[11px] text-muted-foreground truncate max-w-sm text-right"
+                title={appInfo.logsPath}
+              >
+                {appInfo.logsPath}
+              </span>
             </div>
+          )}
 
-            <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Support channel</p>
-              <p className="mt-2 font-medium">{APP_CONFIG.supportEmail}</p>
+          {appInfo.userDataPath && (
+            <div className="py-2.5 flex items-center justify-between gap-4">
+              <span className="text-muted-foreground font-medium shrink-0">User Data Path</span>
+              <span
+                className="font-mono text-[11px] text-muted-foreground truncate max-w-sm text-right"
+                title={appInfo.userDataPath}
+              >
+                {appInfo.userDataPath}
+              </span>
             </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Button onClick={() => window.app.openExternalUrl(APP_CONFIG.repository.url)}>
-                {APP_CONFIG.repository.label}
-                <ArrowUpRight className="ml-2 h-4 w-4" />
-              </Button>
-              <Button variant="outline" onClick={() => window.app.openExternalUrl(`mailto:${APP_CONFIG.supportEmail}`)}>
-                Email support
-                <ArrowUpRight className="ml-2 h-4 w-4" />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+          )}
+        </div>
       </div>
-    </section>
+
+      {/* Legal & Open Source Footer */}
+      <div className="pt-6 border-t border-border/50 space-y-4 text-xs text-muted-foreground">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <p>
+            Created & maintained by{' '}
+            <button
+              type="button"
+              onClick={() => window.app?.openExternalUrl('https://github.com/DevsToolKit')}
+              className="font-medium text-foreground hover:underline cursor-pointer"
+            >
+              {APP_CONFIG.company}
+            </button>
+            {' '}(DevsToolKit).
+          </p>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => window.app?.openExternalUrl(`${APP_CONFIG.repository.url}/blob/main/LICENSE`)}
+              className="hover:text-foreground transition-colors cursor-pointer"
+            >
+              MIT License
+            </button>
+            <span>·</span>
+            <button
+              type="button"
+              onClick={() => window.app?.openExternalUrl(`${APP_CONFIG.repository.url}/releases`)}
+              className="hover:text-foreground transition-colors cursor-pointer"
+            >
+              Changelog
+            </button>
+            <span>·</span>
+            <button
+              type="button"
+              onClick={() => window.app?.openExternalUrl(APP_CONFIG.repository.url)}
+              className="hover:text-foreground transition-colors cursor-pointer"
+            >
+              Source Code
+            </button>
+          </div>
+        </div>
+
+        <p className="text-[11px] text-muted-foreground/80 leading-relaxed">
+          Disclaimer: JobHive is an independent local search aggregation application. It is not
+          affiliated with, endorsed by, or sponsored by LinkedIn, Indeed, Glassdoor, or Google.
+          All trademarks belong to their respective copyright holders.
+        </p>
+      </div>
+    </div>
   );
 }
