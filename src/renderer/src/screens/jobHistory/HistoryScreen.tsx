@@ -29,6 +29,11 @@ interface HistoryScreenProps {
   onNewScrape?: () => void;
 }
 
+const HISTORY_VIEW_MODE_KEY = 'jobhive_history_view_mode';
+const HISTORY_PAGE_SIZE_KEY = 'jobhive_history_page_size';
+const HISTORY_SORT_KEY = 'jobhive_history_sort';
+const HISTORY_STATUS_KEY = 'jobhive_history_status';
+
 export default function HistoryScreen({ onNewScrape }: HistoryScreenProps) {
   const { baseUrl } = useBackend();
   const navigate = useNavigate();
@@ -38,15 +43,42 @@ export default function HistoryScreen({ onNewScrape }: HistoryScreenProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Filters & Controls
+  // Filters & Controls with localStorage persistence
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState<'all' | SessionStatus>('all');
-  const [sort, setSort] = useState<HistorySortOption>('newest');
-  const [viewMode, setViewMode] = useState<HistoryViewMode>('table');
+  const [status, setStatus] = useState<'all' | SessionStatus>(() => {
+    try {
+      const saved = localStorage.getItem(HISTORY_STATUS_KEY);
+      if (saved) return saved as 'all' | SessionStatus;
+    } catch {}
+    return 'all';
+  });
 
-  // Pagination
+  const [sort, setSort] = useState<HistorySortOption>(() => {
+    try {
+      const saved = localStorage.getItem(HISTORY_SORT_KEY);
+      if (saved) return saved as HistorySortOption;
+    } catch {}
+    return 'newest';
+  });
+
+  const [viewMode, setViewMode] = useState<HistoryViewMode>(() => {
+    try {
+      const saved = localStorage.getItem(HISTORY_VIEW_MODE_KEY);
+      if (saved === 'cards' || saved === 'table') return saved;
+    } catch {}
+    return 'table';
+  });
+
+  // Pagination with localStorage persistence
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(HISTORY_PAGE_SIZE_KEY);
+      const parsed = Number(saved);
+      if ([10, 20, 50].includes(parsed)) return parsed;
+    } catch {}
+    return 10;
+  });
 
   const loadSessions = useCallback(
     async (isManualRefresh = false) => {
@@ -116,6 +148,10 @@ export default function HistoryScreen({ onNewScrape }: HistoryScreenProps) {
     setStatus('all');
     setSort('newest');
     setPage(1);
+    try {
+      localStorage.removeItem(HISTORY_STATUS_KEY);
+      localStorage.removeItem(HISTORY_SORT_KEY);
+    } catch {}
   };
 
   const handleSearchChange = (val: string) => {
@@ -126,16 +162,36 @@ export default function HistoryScreen({ onNewScrape }: HistoryScreenProps) {
   const handleStatusChange = (val: 'all' | SessionStatus) => {
     setStatus(val);
     setPage(1);
+    try {
+      if (val === 'all') {
+        localStorage.removeItem(HISTORY_STATUS_KEY);
+      } else {
+        localStorage.setItem(HISTORY_STATUS_KEY, val);
+      }
+    } catch {}
   };
 
   const handleSortChange = (val: HistorySortOption) => {
     setSort(val);
     setPage(1);
+    try {
+      localStorage.setItem(HISTORY_SORT_KEY, val);
+    } catch {}
   };
 
   const handlePageSizeChange = (size: number) => {
     setPageSize(size);
     setPage(1);
+    try {
+      localStorage.setItem(HISTORY_PAGE_SIZE_KEY, String(size));
+    } catch {}
+  };
+
+  const handleViewModeChange = (mode: HistoryViewMode) => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem(HISTORY_VIEW_MODE_KEY, mode);
+    } catch {}
   };
 
   // Filter and Sort sessions
@@ -316,7 +372,7 @@ export default function HistoryScreen({ onNewScrape }: HistoryScreenProps) {
                 onSearchChange={handleSearchChange}
                 onStatusChange={handleStatusChange}
                 onSortChange={handleSortChange}
-                onViewModeChange={setViewMode}
+                onViewModeChange={handleViewModeChange}
                 onReset={handleResetFilters}
               />
 
