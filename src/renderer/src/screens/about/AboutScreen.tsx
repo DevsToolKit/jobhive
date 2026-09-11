@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import appLogo from '@/assets/logo.png';
 import { Button } from '@/components/ui/button';
 import { APP_CONFIG } from '@/config/app';
+import { useTerms } from '@/context/terms/TermsContext';
 
 interface AppInfoState {
   name: string;
@@ -24,6 +25,7 @@ interface AppInfoState {
 }
 
 export default function AboutScreen() {
+  const { openTerms } = useTerms();
   const [appInfo, setAppInfo] = useState<AppInfoState>({
     name: APP_CONFIG.name,
     version: '1.0.2',
@@ -336,7 +338,15 @@ export default function AboutScreen() {
             {' '}(DevsToolKit).
           </p>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={openTerms}
+              className="hover:text-foreground transition-colors cursor-pointer font-medium text-foreground/90 underline-offset-4 hover:underline"
+            >
+              Terms & Privacy
+            </button>
+            <span>·</span>
             <button
               type="button"
               onClick={() => window.app?.openExternalUrl(`${APP_CONFIG.repository.url}/blob/main/LICENSE`)}

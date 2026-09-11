@@ -14,6 +14,8 @@ const ResultsScreen = lazy(() => import('@/screens/results/ResultsScreen'));
 const SettingsScreen = lazy(() => import('@/screens/settings/SettingsPanel'));
 const HistoryScreen = lazy(() => import('./screens/jobHistory/HistoryScreen'));
 
+import { TermsProvider } from '@/context/terms/TermsContext';
+
 function RouteLoadingFallback() {
   return (
     <div className="flex h-64 w-full items-center justify-center text-sm text-muted-foreground animate-pulse">
@@ -62,67 +64,69 @@ function App() {
 
   return (
     <HashRouter>
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <MainLayout
-              handleModalOpen={handleModalOpen}
-              handleModalClose={handleModalClose}
-              openModal={openModal}
-              scrapeDraft={scrapeDraft}
-              onDraftConsumed={() => setScrapeDraft(null)}
-              onRequestNewScrape={handleRequestNewScrape}
+      <TermsProvider>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <MainLayout
+                handleModalOpen={handleModalOpen}
+                handleModalClose={handleModalClose}
+                openModal={openModal}
+                scrapeDraft={scrapeDraft}
+                onDraftConsumed={() => setScrapeDraft(null)}
+                onRequestNewScrape={handleRequestNewScrape}
+              />
+            }
+          >
+            <Route index element={<Dashboard onNewScrape={() => handleRequestNewScrape()} />} />
+            <Route
+              path="history"
+              element={
+                <Suspense fallback={<RouteLoadingFallback />}>
+                  <HistoryScreen onNewScrape={() => handleRequestNewScrape()} />
+                </Suspense>
+              }
             />
-          }
-        >
-          <Route index element={<Dashboard onNewScrape={() => handleRequestNewScrape()} />} />
-          <Route
-            path="history"
-            element={
-              <Suspense fallback={<RouteLoadingFallback />}>
-                <HistoryScreen onNewScrape={() => handleRequestNewScrape()} />
-              </Suspense>
-            }
-          />
-          <Route
-            path="presets"
-            element={
-              <Suspense fallback={<RouteLoadingFallback />}>
-                <PresetsScreen
-                  onUsePreset={(draft) => handleRequestNewScrape(draft)}
-                  onCreatePreset={() => handleRequestNewScrape({ save_as_preset: true })}
-                />
-              </Suspense>
-            }
-          />
-          <Route
-            path="settings"
-            element={
-              <Suspense fallback={<RouteLoadingFallback />}>
-                <SettingsScreen />
-              </Suspense>
-            }
-          />
-          <Route
-            path="about"
-            element={
-              <Suspense fallback={<RouteLoadingFallback />}>
-                <AboutScreen />
-              </Suspense>
-            }
-          />
-          <Route
-            path="results/:sessionId"
-            element={
-              <Suspense fallback={<RouteLoadingFallback />}>
-                <ResultsScreen />
-              </Suspense>
-            }
-          />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
-      </Routes>
+            <Route
+              path="presets"
+              element={
+                <Suspense fallback={<RouteLoadingFallback />}>
+                  <PresetsScreen
+                    onUsePreset={(draft) => handleRequestNewScrape(draft)}
+                    onCreatePreset={() => handleRequestNewScrape({ save_as_preset: true })}
+                  />
+                </Suspense>
+              }
+            />
+            <Route
+              path="settings"
+              element={
+                <Suspense fallback={<RouteLoadingFallback />}>
+                  <SettingsScreen />
+                </Suspense>
+              }
+            />
+            <Route
+              path="about"
+              element={
+                <Suspense fallback={<RouteLoadingFallback />}>
+                  <AboutScreen />
+                </Suspense>
+              }
+            />
+            <Route
+              path="results/:sessionId"
+              element={
+                <Suspense fallback={<RouteLoadingFallback />}>
+                  <ResultsScreen />
+                </Suspense>
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </TermsProvider>
     </HashRouter>
   );
 }

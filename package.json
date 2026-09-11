@@ -55,7 +55,7 @@
   "build": {
     "appId": "com.jobhive.app",
     "productName": "JobHive",
-    "copyright": "Copyright © 2025 ${author}",
+    "copyright": "Copyright © 2026 ${author}",
     "directories": {
       "output": "dist",
       "buildResources": "resources"
