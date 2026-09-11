@@ -24,6 +24,7 @@ import { useBackend } from '@/hooks/useBaseUrl';
 import { LOCATIONS, SEARCH_TERMS, SITES } from '@/config/scrapeFormConfig';
 import { useDashboard } from '@/screens/dashboard/DashboardContext';
 
+import { toast } from 'sonner';
 import ScrapeProgress from './ScrapeProgress';
 import { useScrapeForm } from './useScrapeForm';
 import type { ScrapeDraft, ScrapeFormState } from './types';
@@ -335,7 +336,10 @@ export default function ScrapeWorkbench({
   }, [open, draft, baseUrl, applyDraft, onDraftConsumed, setFormData]);
 
   const handleSubmit = async () => {
-    if (!validateForm()) return;
+    if (!validateForm()) {
+      toast.error('Please fill in all required fields.');
+      return;
+    }
 
     setIsScraping(true);
 
@@ -350,14 +354,17 @@ export default function ScrapeWorkbench({
 
       if (!response.ok) {
         setIsScraping(false);
+        toast.error('Failed to start scraping session.');
         return;
       }
 
       const data = await response.json();
       setSessionId(data.session_id);
+      toast.info(`Scraping started for "${formData.search_term}"`);
     } catch (error) {
       console.error('Scrape error:', error);
       setIsScraping(false);
+      toast.error('Unable to connect to scrape backend.');
     }
   };
 
@@ -369,8 +376,10 @@ export default function ScrapeWorkbench({
       await fetch(`${baseUrl}/api/scrape/cancel/${sessionId}`, {
         method: 'POST',
       });
+      toast.warning('Scrape session cancelled');
     } catch (error) {
       console.error('Cancel error:', error);
+      toast.error('Failed to cancel scrape session');
     }
   };
 

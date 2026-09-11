@@ -11,6 +11,7 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  SearchX,
   SlidersHorizontal,
   Trash2,
   X,
@@ -138,6 +139,7 @@ export default function PresetsScreen({
 
     try {
       const preset = await fetchPreset(baseUrl, presetId);
+      toast.info(`Loaded preset "${preset.name}"`);
       onUsePreset({
         ...(preset.config as ScrapeDraft),
         preset_id: preset.id,
@@ -246,22 +248,22 @@ export default function PresetsScreen({
           {presets.length === 0 ? (
             <Card className="border-dashed border-border/80 bg-card/50 py-16 text-center">
               <CardContent className="flex flex-col items-center justify-center space-y-4">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-8 ring-primary/5">
-                  <SlidersHorizontal className="h-7 w-7" />
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/60 text-muted-foreground ring-8 ring-muted/20">
+                  <SlidersHorizontal className="h-7 w-7 stroke-[1.75]" />
                 </div>
-                <div className="max-w-md space-y-1">
-                  <h3 className="text-lg font-semibold tracking-tight text-foreground">
+                <div className="max-w-md space-y-1.5">
+                  <h3 className="text-xl font-semibold tracking-tight text-foreground">
                     No Presets Saved Yet
                   </h3>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
+                  <p className="text-sm text-muted-foreground leading-relaxed">
                     Save any search configuration during scrape setup to reuse your favorite keywords, locations, and filters with a single click.
                   </p>
                 </div>
                 <Button
                   onClick={onCreatePreset}
-                  className="gap-2 mt-2 shadow-xs font-medium text-xs h-8.5 cursor-pointer"
+                  className="gap-2 mt-2 shadow-xs font-medium text-sm h-9 cursor-pointer"
                 >
-                  <Plus className="h-3.5 w-3.5" />
+                  <Plus className="h-4 w-4" />
                   Create from New Scrape
                 </Button>
               </CardContent>
@@ -339,22 +341,33 @@ export default function PresetsScreen({
 
               {/* No matching presets found for current filter */}
               {filteredPresets.length === 0 ? (
-                <Card className="border-dashed border-border/80 bg-card/50 py-12 text-center">
-                  <CardContent className="flex flex-col items-center justify-center space-y-3">
-                    <p className="text-sm font-medium text-foreground">
-                      No presets match &ldquo;{search}&rdquo;
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Try searching with different keywords or clear your search query.
-                    </p>
+                <Card className="border-dashed border-border/80 bg-card/50 py-16 text-center">
+                  <CardContent className="flex flex-col items-center justify-center space-y-4">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/60 text-muted-foreground ring-8 ring-muted/20">
+                      <SearchX className="h-7 w-7 stroke-[1.75]" />
+                    </div>
+                    <div className="max-w-md space-y-1.5">
+                      <h3 className="text-xl font-semibold tracking-tight text-foreground">
+                        No matching presets
+                      </h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        {search ? (
+                          <>
+                            No presets found matching &ldquo;<span className="font-medium text-foreground">{search}</span>&rdquo;. Try searching with different keywords.
+                          </>
+                        ) : (
+                          'Try searching with different keywords or clear your search query.'
+                        )}
+                      </p>
+                    </div>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => setSearch('')}
-                      className="h-8 gap-1.5 text-xs mt-1 cursor-pointer"
+                      className="gap-2 mt-2 border-border/80 shadow-xs cursor-pointer font-medium text-sm h-9"
                     >
-                      <RotateCcw className="h-3 w-3" />
-                      Clear search
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      Reset Search
                     </Button>
                   </CardContent>
                 </Card>

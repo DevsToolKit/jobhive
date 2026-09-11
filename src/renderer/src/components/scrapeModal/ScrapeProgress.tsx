@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   ArrowRight,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 export interface RecentJob {
   id: string;
@@ -182,6 +183,7 @@ export const ScrapeProgress: React.FC<ScrapeProgressProps> = ({
           setIsCancelled(true);
           eventSource.close();
           setIsConnected(false);
+          toast.info('Scraping session cancelled');
           return;
         }
 
@@ -190,6 +192,7 @@ export const ScrapeProgress: React.FC<ScrapeProgressProps> = ({
           setIsComplete(true);
           eventSource.close();
           setIsConnected(false);
+          toast.success(`Scrape completed! Found ${data.total_jobs || 0} jobs.`);
         }
       } catch (err) {
         console.error('Error parsing progress SSE:', err);

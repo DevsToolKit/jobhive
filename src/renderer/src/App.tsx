@@ -15,6 +15,7 @@ const SettingsScreen = lazy(() => import('@/screens/settings/SettingsPanel'));
 const HistoryScreen = lazy(() => import('./screens/jobHistory/HistoryScreen'));
 
 import { TermsProvider } from '@/context/terms/TermsContext';
+import { Toaster } from '@/components/ui/sonner';
 
 function RouteLoadingFallback() {
   return (
@@ -126,6 +127,7 @@ function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
+        <Toaster />
       </TermsProvider>
     </HashRouter>
   );

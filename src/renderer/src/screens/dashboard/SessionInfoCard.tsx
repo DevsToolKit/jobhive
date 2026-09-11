@@ -4,6 +4,7 @@ import { Info, Check, Copy } from 'lucide-react';
 import { Session } from '@/types/session';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 
 type Props = {
   session: Session;
@@ -25,6 +26,7 @@ export default function SessionInfoCard({ session }: Props) {
     e.stopPropagation();
     navigator.clipboard.writeText(session.id);
     setCopied(true);
+    toast.success('Session ID copied to clipboard');
     setTimeout(() => setCopied(false), 2000);
   };
 

@@ -266,7 +266,7 @@ export default function HistoryScreen({ onNewScrape }: HistoryScreenProps) {
             size="sm"
             onClick={() => loadSessions(true)}
             disabled={loading || refreshing}
-            className="h-8.5 gap-1.5 text-xs font-medium border-border/80 shadow-2xs"
+            className="h-8.5 gap-1.5 text-xs font-medium border-border/80 shadow-2xs cursor-pointer"
             title="Refresh history"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
@@ -277,7 +277,7 @@ export default function HistoryScreen({ onNewScrape }: HistoryScreenProps) {
             <Button
               size="sm"
               onClick={onNewScrape}
-              className="h-8.5 gap-1.5 text-xs font-medium shadow-xs"
+              className="h-8.5 gap-1.5 text-xs font-medium shadow-xs cursor-pointer"
             >
               <Plus className="h-4 w-4" />
               <span>New Scrape</span>

@@ -22,6 +22,7 @@ import {
   Laptop,
   CheckCircle2,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 type JobDetailsDrawerProps = {
   job: Job | null;
@@ -293,9 +294,11 @@ export default function JobDetailsDrawer({ job, open, onClose }: JobDetailsDrawe
     try {
       await navigator.clipboard.writeText(job.job_url);
       setCopied(true);
+      toast.success('Job link copied to clipboard');
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy', err);
+      toast.error('Failed to copy link');
     }
   };
 

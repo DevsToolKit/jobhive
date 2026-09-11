@@ -11,13 +11,14 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
+  Building2,
   Check,
   Copy,
   ExternalLink,
   Globe,
   MoreVertical,
-  Building2,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface CardHeaderProps {
   companyName: string;
@@ -67,9 +68,11 @@ export default function CardHeader({
     try {
       await navigator.clipboard.writeText(job_url);
       setCopied(true);
+      toast.success('Job link copied to clipboard');
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy link', err);
+      toast.error('Failed to copy link');
     }
   };
 
